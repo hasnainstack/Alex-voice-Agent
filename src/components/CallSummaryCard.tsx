@@ -37,42 +37,37 @@ export function CallSummaryCard({ summary }: { summary: CallSummary }) {
       {/* ── Route confirmed ── */}
       <div className="px-5 py-4 border-b border-line">
         <p className="font-mono text-[10px] tracking-[0.14em] text-ink400 mb-3">TRAJET DÉTECTÉ</p>
-        <div className="flex items-center gap-3">
-          {/* Departure */}
-          <div className="flex-1 rounded-xl bg-paper px-3 py-2.5 text-center">
-            <p className="font-mono text-[9px] tracking-wider text-ink400 mb-1">DÉPART</p>
-            {summary.departure ? (
-              <p className="font-display text-lg text-ink900 leading-tight">{summary.departure}</p>
-            ) : (
-              <p className="text-sm text-ink400 italic">Non précisé</p>
-            )}
-          </div>
-
-          {/* Arrow */}
-          <div className="shrink-0 flex flex-col items-center gap-0.5">
-            <svg className="w-5 h-5 text-beacon" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-            </svg>
-            {hasRoute && (
+        {hasRoute ? (
+          <div className="flex items-center gap-3">
+            <div className="flex-1 rounded-xl bg-paper px-3 py-2.5 text-center">
+              <p className="font-mono text-[9px] tracking-wider text-ink400 mb-1">DÉPART</p>
+              {summary.departure ? (
+                <p className="font-display text-lg text-ink900 leading-tight">{summary.departure}</p>
+              ) : (
+                <p className="text-sm text-ink400 italic">Non précisé</p>
+              )}
+            </div>
+            <div className="shrink-0 flex flex-col items-center gap-0.5">
+              <svg className="w-5 h-5 text-beacon" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
               <span className="font-mono text-[8px] text-beacon tracking-wider">CONFIRMÉ</span>
-            )}
+            </div>
+            <div className="flex-1 rounded-xl bg-paper px-3 py-2.5 text-center">
+              <p className="font-mono text-[9px] tracking-wider text-ink400 mb-1">ARRIVÉE</p>
+              {summary.arrival ? (
+                <p className="font-display text-lg text-ink900 leading-tight">{summary.arrival}</p>
+              ) : (
+                <p className="text-sm text-ink400 italic">Non précisé</p>
+              )}
+            </div>
           </div>
-
-          {/* Arrival */}
-          <div className="flex-1 rounded-xl bg-paper px-3 py-2.5 text-center">
-            <p className="font-mono text-[9px] tracking-wider text-ink400 mb-1">ARRIVÉE</p>
-            {summary.arrival ? (
-              <p className="font-display text-lg text-ink900 leading-tight">{summary.arrival}</p>
-            ) : (
-              <p className="text-sm text-ink400 italic">Non précisé</p>
-            )}
+        ) : (
+          <div className="rounded-xl bg-paper px-4 py-3 text-center">
+            <p className="text-sm text-ink400 italic">
+              Les villes n&apos;ont pas été mentionnées explicitement pendant l&apos;appel.
+            </p>
           </div>
-        </div>
-
-        {!hasRoute && (
-          <p className="mt-2 text-[11px] text-ink400 text-center">
-            Les villes n&apos;ont pas été mentionnées explicitement pendant l&apos;appel.
-          </p>
         )}
       </div>
 

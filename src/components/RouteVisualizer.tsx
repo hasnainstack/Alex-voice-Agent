@@ -25,6 +25,14 @@ const STATUS_COLOR: Record<CallStatus, string> = {
   error: "text-red-400",
 };
 
+function getStatusLabel(status: CallStatus): string {
+  return STATUS_LABEL[status] ?? "";
+}
+
+function getStatusColor(status: CallStatus): string {
+  return STATUS_COLOR[status] ?? "text-ink400";
+}
+
 /**
  * Renders a departure -> arrival route line, echoing a freight waybill's
  * shipment tracker rather than a generic voice-call orb. The beacon travels
@@ -46,27 +54,27 @@ export function RouteVisualizer({
           WAYBILL N° NC-2026-0710
         </span>
         <span
-          className={`font-mono text-[11px] tracking-[0.18em] font-semibold ${STATUS_COLOR[status]}`}
+          className={`font-mono text-[11px] tracking-[0.18em] font-semibold ${getStatusColor(status)}`}
         >
-          {STATUS_LABEL[status]}
+          {getStatusLabel(status)}
         </span>
       </div>
 
       <div className="flex items-center justify-between mb-3">
         <div>
-          <div className="font-mono text-[10px] tracking-[0.14em] text-ink400 mb-1">
-            DÉPART
-          </div>
-          <div className="font-display text-2xl sm:text-3xl text-paper tracking-tight">
-            {routeInfo.departure ?? <span className="text-ink400 text-xl">—</span>}
+          <div className="font-mono text-[10px] tracking-[0.14em] text-ink400 mb-1">DÉPART</div>
+          <div className="font-display text-2xl sm:text-3xl text-paper tracking-tight min-h-[2rem]">
+            {routeInfo.departure ?? (
+              <span className={`text-xl ${isLive ? "animate-pulse text-beacon/40" : "text-ink400"}`}>—</span>
+            )}
           </div>
         </div>
         <div className="text-right">
-          <div className="font-mono text-[10px] tracking-[0.14em] text-ink400 mb-1">
-            ARRIVÉE
-          </div>
-          <div className="font-display text-2xl sm:text-3xl text-paper tracking-tight">
-            {routeInfo.arrival ?? <span className="text-ink400 text-xl">—</span>}
+          <div className="font-mono text-[10px] tracking-[0.14em] text-ink400 mb-1">ARRIVÉE</div>
+          <div className="font-display text-2xl sm:text-3xl text-paper tracking-tight min-h-[2rem]">
+            {routeInfo.arrival ?? (
+              <span className={`text-xl ${isLive ? "animate-pulse text-beacon/40" : "text-ink400"}`}>—</span>
+            )}
           </div>
         </div>
       </div>
@@ -81,9 +89,9 @@ export function RouteVisualizer({
         />
         {isLive && (
           <div
-            className="absolute top-1/2 h-4 w-4 -translate-y-1/2 -translate-x-1/2 rounded-full bg-beacon animate-travel animate-beaconPulse"
+            className="absolute top-1/2 h-4 w-4 rounded-full bg-beacon animate-travel animate-beaconPulse"
             style={{
-              transform: `translateY(-50%) scale(${isAssistantSpeaking ? glowScale : 1})`,
+              transform: `translateX(-50%) translateY(-50%) scale(${isAssistantSpeaking ? glowScale : 1})`,
               transition: "transform 120ms ease-out",
             }}
             aria-hidden
@@ -91,10 +99,21 @@ export function RouteVisualizer({
         )}
       </div>
 
-      <p className="mt-6 text-sm text-ink400 leading-relaxed">
-        {routeInfo.departure || routeInfo.arrival
-          ? `Trajet détecté : ${routeInfo.departure ?? "?"} → ${routeInfo.arrival ?? "?"}`
-          : "Les villes seront détectées automatiquement pendant la conversation."}
+      <p className="mt-6 text-sm leading-relaxed">
+        {routeInfo.departure && routeInfo.arrival ? (
+          <span className="text-confirmed font-semibold">
+            {routeInfo.departure} → {routeInfo.arrival}
+          </span>
+        ) : routeInfo.departure || routeInfo.arrival ? (
+          <span className="text-beacon">
+            {routeInfo.departure ? `Départ : ${routeInfo.departure}` : `Arrivée : ${routeInfo.arrival}`}
+            {" — en attente de l’autre ville…"}
+          </span>
+        ) : (
+          <span className="text-ink400">
+            {isLive ? "En écoute… mentionnez vos villes de départ et d’arrivée." : "Les villes apparaîtront ici pendant l’appel."}
+          </span>
+        )}
       </p>
     </div>
   );

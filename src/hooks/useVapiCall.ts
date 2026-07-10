@@ -10,51 +10,104 @@ import {
   isVapiTranscriptMessage,
 } from "@/types/call";
 
-// Vapi STT delivers lowercase, unpunctuated text — all matching must be case-insensitive
-// and city names must be captured then title-cased for display.
+// ---------------------------------------------------------------------------
+// Route extraction
+// ---------------------------------------------------------------------------
+//
+// ROOT CAUSES FIXED:
+//
+// 1. CITY_RE was unbounded: `(?:[\s\-][a-z]{2,})*` with no limit swallowed
+//    entire sentence tails — "paris pour travailler demain" became the city.
+//    Fix: CITY_RE now only matches a single word or a hyphenated compound.
+//    CITY2_RE allows one optional space-separated second word and is only used
+//    in patterns that already have a strong keyword anchor.
+//
+// 2. extractRouteFromTranscript iterated oldest-first and broke on first match,
+//    so user corrections ("non je pars de lille") were silently ignored.
+//    Fix: iterate NEWEST-first — last thing the user said always wins.
+//
+// 3. setRouteInfo was called inside the setTranscript updater (impure updater).
+//    Fix: extract the route from the ref after the state update, call
+//    setRouteInfo outside the updater.
+//
+// 4. "pour aller à lyon" captured "aller" as the city because the `aller`
+//    group was optional, making `pour\s+CITY` match `pour aller`.
+//    Fix: split into two patterns — one requires `aller + à`, the other
+//    uses a negative lookahead to reject known French infinitives after "pour".
+//
+// 5. "départ est paris" and "arrivée est lyon" were not matched at all.
+//    Fix: added explicit `départ est/c'est CITY` and `arrivée est/c'est CITY`
+//    patterns — these are the most natural answers to Alex's direct questions.
+//
+// 6. Stop-word check tested the full multi-word capture string, not each word.
+//    Fix: check both the full string and the first word independently.
+// ---------------------------------------------------------------------------
 
-// Matches a city: 3+ letter word, optionally followed by a hyphenated/spaced second word
-// e.g. "paris", "saint-étienne", "le havre"
-const CITY_RE = "([a-z\u00e0-\u00ff]{3,}(?:[\\s\\-][a-z\u00e0-\u00ff]{2,})*)";
+// Single word or hyphenated compound: "paris", "lyon", "saint-étienne"
+const CITY_RE = "([a-z\u00e0-\u00ff]{3,}(?:-[a-z\u00e0-\u00ff]{2,})*)";
+
+// One or two space-separated words, or hyphenated: "le havre", "la rochelle"
+// Only used where a strong keyword anchor precedes the city slot.
+const CITY2_RE = "([a-z\u00e0-\u00ff]{2,}(?:\\s[a-z\u00e0-\u00ff]{2,})?(?:-[a-z\u00e0-\u00ff]{2,})*)";
 
 const DEPARTURE_PATTERNS: RegExp[] = [
-  // "je pars de paris", "on part de lyon", "partir de bordeaux"
-  new RegExp(`partir?\\s+de\\s+${CITY_RE}`, "i"),
-  // "je suis à paris", "j'habite à paris", "j'habite paris"
-  new RegExp(`(?:j'?habite|je\\s+vis|je\\s+suis|on\\s+est|on\\s+habite)\\s+(?:à\\s+|a\\s+)?${CITY_RE}`, "i"),
+  // "je pars de paris", "on part de lyon", "partir depuis bordeaux"
+  new RegExp(`partir?\\s+(?:de|depuis)\\s+${CITY2_RE}`, "i"),
+  // "départ est paris", "départ c'est paris", "mon départ est paris"
+  new RegExp(`d[ée]part\\s+(?:est|c'est|sera|de|depuis)\\s+${CITY2_RE}`, "i"),
+  // "je déménage de paris", "on déménage depuis lyon"
+  new RegExp(`d[ée]m[eé]nage(?:r|ons|z)?\\s+(?:de|depuis)\\s+${CITY2_RE}`, "i"),
+  // "j'habite à paris", "j'habite paris", "je vis à paris"
+  new RegExp(`(?:j'?habite|je\\s+vis)\\s+(?:à\\s+|a\\s+)?${CITY2_RE}`, "i"),
   // "mon adresse est à paris", "adresse actuelle paris"
-  new RegExp(`adresse\\s+(?:actuelle\\s+)?(?:est\\s+)?(?:à\\s+|a\\s+)?${CITY_RE}`, "i"),
-  // "départ de paris", "départ depuis paris"
-  new RegExp(`d[ée]part\\s+(?:de|depuis)\\s+${CITY_RE}`, "i"),
-  // "depuis paris", "de paris pour"
-  new RegExp(`(?:depuis|de)\\s+${CITY_RE}\\s+(?:pour|vers|jusqu|à|a)`, "i"),
-  // "je quitte paris", "je quitte la ville de paris"
-  new RegExp(`quitter?\\s+(?:la\\s+ville\\s+de\\s+)?${CITY_RE}`, "i"),
+  new RegExp(`adresse\\s+(?:actuelle\\s+)?(?:est\\s+)?(?:à\\s+|a\\s+)?${CITY2_RE}`, "i"),
+  // "depuis paris" — only when followed by a sentence boundary or "pour/vers"
+  new RegExp(`depuis\\s+${CITY2_RE}(?=\\s+(?:pour|vers|jusqu|et|je|on)|$)`, "i"),
+  // "je quitte paris", "on quitte lyon"
+  new RegExp(`quitter?\\s+${CITY2_RE}`, "i"),
+  // "ville de départ est paris", "ville de départ : paris"
+  new RegExp(`ville\\s+de\\s+d[ée]part\\s*(?:est|:)?\\s*${CITY2_RE}`, "i"),
 ];
 
 const ARRIVAL_PATTERNS: RegExp[] = [
-  // "pour aller à lyon", "pour lyon"
-  new RegExp(`pour\\s+(?:aller\\s+)?(?:à\\s+|a\\s+)?${CITY_RE}`, "i"),
-  // "je vais à lyon", "on va à lyon"
-  new RegExp(`(?:je\\s+vais|on\\s+va|je\\s+veux\\s+aller|je\\s+souhaite\\s+aller)\\s+(?:à\\s+|a\\s+)?${CITY_RE}`, "i"),
-  // "m'installer à lyon", "emménager à lyon", "s'installer à lyon"
-  new RegExp(`(?:m'?installer|s'?installer|emm[eé]nager|m'?installer)\\s+(?:à\\s+|a\\s+|en\\s+)?${CITY_RE}`, "i"),
-  // "destination lyon", "destination : lyon"
-  new RegExp(`destination\\s*:?\\s*${CITY_RE}`, "i"),
-  // "arriver à lyon", "j'arrive à lyon"
-  new RegExp(`arriv(?:er?|ez|ons)\\s+(?:à\\s+|a\\s+|en\\s+)?${CITY_RE}`, "i"),
+  // "je vais à lyon", "on va à marseille", "je veux aller à bordeaux"
+  new RegExp(`(?:je\\s+vais|on\\s+va|je\\s+veux\\s+aller|je\\s+souhaite\\s+aller|je\\s+compte\\s+aller)\\s+(?:à\\s+|a\\s+|en\\s+)?${CITY2_RE}`, "i"),
+  // "arrivée est lyon", "arrivée c'est lyon", "mon arrivée est lyon"
+  new RegExp(`arriv[ée]e?\\s+(?:est|c'est|sera|à|a)\\s+${CITY2_RE}`, "i"),
+  // "destination bordeaux", "destination : bordeaux", "destination est bordeaux"
+  new RegExp(`destination\\s*(?:est|c'est|:)?\\s*${CITY2_RE}`, "i"),
+  // "pour aller à lyon" — require "à/a/en" after "aller" to avoid capturing "aller"
+  new RegExp(`pour\\s+aller\\s+(?:à\\s+|a\\s+|en\\s+)${CITY2_RE}`, "i"),
+  // "pour lyon" — negative lookahead rejects known infinitives after "pour"
+  new RegExp(`pour\\s+(?!(?:aller|faire|voir|trouver|travailler|vivre|habiter|rejoindre|rentrer|rester|chercher|prendre)\\s)${CITY_RE}`, "i"),
+  // "m'installer à lyon", "s'installer à lyon", "emménager à lyon"
+  new RegExp(`(?:m'?installer|s'?installer|emm[eé]nager)\\s+(?:à\\s+|a\\s+|en\\s+)?${CITY2_RE}`, "i"),
+  // "j'arrive à lyon", "arriver à lyon" — require preposition to avoid "arrivée" false match
+  new RegExp(`arriv(?:er?|ez|ons|e)\\s+(?:à\\s+|a\\s+|en\\s+)${CITY2_RE}`, "i"),
   // "vers lyon"
   new RegExp(`vers\\s+${CITY_RE}`, "i"),
+  // "ville d'arrivée est lyon", "ville d'arrivée : lyon"
+  new RegExp(`ville\\s+d'arriv[ée]e\\s*(?:est|:)?\\s*${CITY2_RE}`, "i"),
 ];
 
-// Stop-words that should never be treated as city names
+// Words that must never be returned as a city name.
 const STOP_WORDS = new Set([
+  // articles / determiners
   "une", "des", "les", "mes", "ses", "nos", "vos", "leur", "leurs",
-  "mon", "ton", "son", "notre", "votre",
+  "mon", "ton", "son", "notre", "votre", "cet", "cette", "ces",
+  // conjunctions / prepositions
   "que", "qui", "quoi", "dont", "où", "ou", "et", "mais", "donc",
-  "car", "par", "sur", "sous", "dans", "avec", "sans", "entre",
+  "car", "par", "sur", "sous", "dans", "avec", "sans", "entre", "vers",
+  "pour", "depuis", "jusqu",
+  // infinitives that appear right after "pour" / "vers"
+  "aller", "faire", "voir", "trouver", "travailler", "vivre", "habiter",
+  "rejoindre", "rentrer", "partir", "rester", "chercher", "prendre",
+  // generic nouns
   "ville", "maison", "appartement", "logement", "travail", "bureau",
-  "france", "europe", "pays",
+  "france", "europe", "pays", "region", "région",
+  // time words that leak into city slot
+  "demain", "aujourd", "semaine", "mois", "prochain", "prochaine",
+  "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche",
 ]);
 
 function titleCase(str: string): string {
@@ -70,7 +123,12 @@ function extractCity(text: string, patterns: RegExp[]): string | null {
     const match = lower.match(pattern);
     if (match?.[1]) {
       const city = match[1].trim();
-      if (city.length >= 3 && !STOP_WORDS.has(city.toLowerCase())) {
+      const firstWord = city.split(/[\s-]/)[0] ?? "";
+      if (
+        city.length >= 3 &&
+        !STOP_WORDS.has(city) &&
+        !STOP_WORDS.has(firstWord)
+      ) {
         return titleCase(city);
       }
     }
@@ -78,17 +136,25 @@ function extractCity(text: string, patterns: RegExp[]): string | null {
   return null;
 }
 
-// Scan the full transcript array for the best departure/arrival values
+// Scan ALL entries NEWEST-FIRST so the user's latest correction always wins.
+// Both user and assistant lines are scanned — Alex often confirms the city
+// ("Vous partez donc de Paris") which is the most reliable signal.
 function extractRouteFromTranscript(entries: TranscriptEntry[]): RouteInfo {
   let departure: string | null = null;
   let arrival: string | null = null;
-  for (const entry of entries) {
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const entry = entries[i];
+    if (!entry) continue;
     if (!departure) departure = extractCity(entry.text, DEPARTURE_PATTERNS);
-    if (!arrival) arrival = extractCity(entry.text, ARRIVAL_PATTERNS);
+    if (!arrival)   arrival   = extractCity(entry.text, ARRIVAL_PATTERNS);
     if (departure && arrival) break;
   }
   return { departure, arrival };
 }
+
+// ---------------------------------------------------------------------------
+// Hook
+// ---------------------------------------------------------------------------
 
 interface UseVapiCallResult {
   status: CallStatus;
@@ -125,10 +191,6 @@ export function useVapiCall(): UseVapiCallResult {
   }, []);
 
   useEffect(() => {
-    // Guard: Vapi's SDK touches window/mic APIs, so it can only be
-    // constructed client-side. This effect only runs in the browser anyway,
-    // but getVapiClient() throws early and clearly if that assumption ever
-    // breaks (e.g. this hook gets called during SSR by mistake).
     const vapi = getVapiClient();
 
     const handleCallStart = () => {
@@ -158,7 +220,6 @@ export function useVapiCall(): UseVapiCallResult {
         clearInterval(durationInterval.current);
         durationInterval.current = null;
       }
-      // Final authoritative scan of the complete transcript
       const finalRoute = extractRouteFromTranscript(transcriptRef.current);
       setRouteInfo(finalRoute);
       setCallSummary({
@@ -170,15 +231,14 @@ export function useVapiCall(): UseVapiCallResult {
     };
 
     const handleSpeechStart = () => setIsAssistantSpeaking(true);
-    const handleSpeechEnd = () => setIsAssistantSpeaking(false);
+    const handleSpeechEnd   = () => setIsAssistantSpeaking(false);
     const handleVolumeLevel = (level: number) => setVolumeLevel(level);
 
     const handleMessage = (message: unknown) => {
       if (!isVapiTranscriptMessage(message)) return;
       if (message.transcriptType !== "final") return;
 
-      // Debug: open DevTools console to verify what Vapi is sending
-      console.log(`[route extract] ${message.role}: "${message.transcript}"`);
+      console.log(`[vapi] ${message.role}: "${message.transcript}"`);
 
       const entry: TranscriptEntry = {
         id: nextId(),
@@ -188,16 +248,18 @@ export function useVapiCall(): UseVapiCallResult {
         isFinal: true,
       };
 
-      setTranscript((prev) => {
-        const next = [...prev, entry];
-        transcriptRef.current = next;
-        // Re-scan the full transcript so assistant confirmations also update route
-        const route = extractRouteFromTranscript(next);
-        console.log(`[route extract] result →`, route);
-        routeRef.current = route;
-        setRouteInfo(route);
-        return next;
-      });
+      // 1. Append entry to the ref synchronously so extraction sees it immediately.
+      const next = [...transcriptRef.current, entry];
+      transcriptRef.current = next;
+
+      // 2. Extract route from the updated ref — outside the state updater (pure).
+      const route = extractRouteFromTranscript(next);
+      console.log(`[vapi] route →`, route);
+      routeRef.current = route;
+
+      // 3. Flush both state updates together — React 18 batches these.
+      setTranscript(next);
+      setRouteInfo(route);
     };
 
     const handleError = (error: unknown) => {
@@ -212,25 +274,23 @@ export function useVapiCall(): UseVapiCallResult {
       }
     };
 
-    vapi.on("call-start", handleCallStart);
-    vapi.on("call-end", handleCallEnd);
+    vapi.on("call-start",   handleCallStart);
+    vapi.on("call-end",     handleCallEnd);
     vapi.on("speech-start", handleSpeechStart);
-    vapi.on("speech-end", handleSpeechEnd);
+    vapi.on("speech-end",   handleSpeechEnd);
     vapi.on("volume-level", handleVolumeLevel);
-    vapi.on("message", handleMessage);
-    vapi.on("error", handleError);
+    vapi.on("message",      handleMessage);
+    vapi.on("error",        handleError);
 
     return () => {
-      vapi.off("call-start", handleCallStart);
-      vapi.off("call-end", handleCallEnd);
+      vapi.off("call-start",   handleCallStart);
+      vapi.off("call-end",     handleCallEnd);
       vapi.off("speech-start", handleSpeechStart);
-      vapi.off("speech-end", handleSpeechEnd);
+      vapi.off("speech-end",   handleSpeechEnd);
       vapi.off("volume-level", handleVolumeLevel);
-      vapi.off("message", handleMessage);
-      vapi.off("error", handleError);
-      if (durationInterval.current) {
-        clearInterval(durationInterval.current);
-      }
+      vapi.off("message",      handleMessage);
+      vapi.off("error",        handleError);
+      if (durationInterval.current) clearInterval(durationInterval.current);
     };
   }, [nextId]);
 
