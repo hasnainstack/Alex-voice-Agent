@@ -1,11 +1,12 @@
 "use client";
 
-import { CallStatus } from "@/types/call";
+import { CallStatus, RouteInfo } from "@/types/call";
 
 interface RouteVisualizerProps {
   status: CallStatus;
   isAssistantSpeaking: boolean;
   volumeLevel: number;
+  routeInfo: RouteInfo;
 }
 
 const STATUS_LABEL: Record<CallStatus, string> = {
@@ -33,6 +34,7 @@ export function RouteVisualizer({
   status,
   isAssistantSpeaking,
   volumeLevel,
+  routeInfo,
 }: RouteVisualizerProps) {
   const isLive = status === "active";
   const glowScale = 1 + Math.min(volumeLevel, 1) * 0.6;
@@ -56,7 +58,7 @@ export function RouteVisualizer({
             DÉPART
           </div>
           <div className="font-display text-2xl sm:text-3xl text-paper tracking-tight">
-            Paris
+            {routeInfo.departure ?? <span className="text-ink400 text-xl">—</span>}
           </div>
         </div>
         <div className="text-right">
@@ -64,7 +66,7 @@ export function RouteVisualizer({
             ARRIVÉE
           </div>
           <div className="font-display text-2xl sm:text-3xl text-paper tracking-tight">
-            Lyon
+            {routeInfo.arrival ?? <span className="text-ink400 text-xl">—</span>}
           </div>
         </div>
       </div>
@@ -90,9 +92,9 @@ export function RouteVisualizer({
       </div>
 
       <p className="mt-6 text-sm text-ink400 leading-relaxed">
-        Alex qualifie le projet de déménagement en direct — ville de départ,
-        ville d&rsquo;arrivée, date souhaitée. Le trajet ci-dessus reflète un
-        exemple : la conversation réelle déterminera les villes exactes.
+        {routeInfo.departure || routeInfo.arrival
+          ? `Trajet détecté : ${routeInfo.departure ?? "?"} → ${routeInfo.arrival ?? "?"}`
+          : "Les villes seront détectées automatiquement pendant la conversation."}
       </p>
     </div>
   );

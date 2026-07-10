@@ -4,6 +4,18 @@
  */
 export type CallStatus = "idle" | "connecting" | "active" | "ended" | "error";
 
+export interface RouteInfo {
+  departure: string | null;
+  arrival: string | null;
+}
+
+export interface CallSummary {
+  duration: number; // seconds
+  departure: string | null;
+  arrival: string | null;
+  transcript: TranscriptEntry[];
+}
+
 export type Speaker = "user" | "assistant";
 
 export interface TranscriptEntry {
