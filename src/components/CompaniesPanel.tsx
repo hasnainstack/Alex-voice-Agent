@@ -26,6 +26,8 @@ const COMPANIES: Company[] = [
   { id: "8", name: "Iberia Transports", cities: "Paris · Barcelone · Lisbonne", rating: 4.5, priceRange: "€€", initials: "IT", avatarColor: "bg-indigo-500" },
 ];
 
+type PanelState = "idle" | "searching" | "results";
+
 interface PanelProps {
   status: CallStatus;
   routeInfo: { departure: string | null; arrival: string | null };
@@ -232,11 +234,6 @@ function PanelHeader({ panelState, count }: { panelState: PanelState; count: num
 }
 
 // ── Exports ───────────────────────────────────────────────────────────────────
-
-interface PanelProps {
-  status: CallStatus;
-  transcriptCount: number;
-}
 
 export function CompaniesSidebar({ status, routeInfo }: PanelProps) {
   const panelState = usePanelState(status, routeInfo);
