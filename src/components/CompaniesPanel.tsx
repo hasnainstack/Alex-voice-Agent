@@ -33,27 +33,8 @@ interface PanelProps {
   routeInfo: { departure: string | null; arrival: string | null };
 }
 
-function usePanelState(
-  status: CallStatus,
-  routeInfo: { departure: string | null; arrival: string | null }
-): PanelState {
-  const [revealed, setRevealed] = useState(false);
-  const cityDetected = !!(routeInfo.departure || routeInfo.arrival);
-
-  useEffect(() => {
-    if (status === "idle" || status === "connecting") {
-      setRevealed(false);
-      return;
-    }
-    if (cityDetected) {
-      // Delay so it feels like results just came back after city is heard
-      const t = setTimeout(() => setRevealed(true), 900);
-      return () => clearTimeout(t);
-    }
-  }, [status, cityDetected]);
-
+function usePanelState(status: CallStatus): PanelState {
   if (status === "idle" || status === "connecting") return "idle";
-  if ((status === "active" || status === "ended") && !revealed) return "searching";
   return "results";
 }
 
@@ -75,11 +56,10 @@ function StarRating({ rating }: { rating: number }) {
   );
 }
 
-function CompanyCard({ c, index }: { c: Company; index: number }) {
+function CompanyCard({ c }: { c: Company }) {
   return (
     <li
-      className="group flex items-center gap-3 rounded-xl border border-line bg-white p-3 hover:border-beacon/50 hover:shadow-sm transition-all duration-150 cursor-pointer animate-rise"
-      style={{ animationDelay: `${index * 80}ms`, animationFillMode: "both" }}
+      className="group flex items-center gap-3 rounded-xl border border-line bg-white p-3 hover:border-beacon/50 hover:shadow-sm transition-all duration-150 cursor-pointer"
     >
       <div className={`${c.avatarColor} h-10 w-10 rounded-xl flex items-center justify-center shrink-0`}>
         <span className="text-white text-xs font-bold tracking-wide">{c.initials}</span>
@@ -192,8 +172,8 @@ function ResultsState() {
   return (
     <>
       <ul className="space-y-2">
-        {COMPANIES.map((c, i) => (
-          <CompanyCard key={c.id} c={c} index={i} />
+        {COMPANIES.map((c) => (
+          <CompanyCard key={c.id} c={c} />
         ))}
       </ul>
       <p className="mt-4 text-center text-[10px] font-mono tracking-wider text-ink400 uppercase">
@@ -236,7 +216,7 @@ function PanelHeader({ panelState, count }: { panelState: PanelState; count: num
 // ── Exports ───────────────────────────────────────────────────────────────────
 
 export function CompaniesSidebar({ status, routeInfo }: PanelProps) {
-  const panelState = usePanelState(status, routeInfo);
+  const panelState = usePanelState(status);
 
   return (
     <aside className="hidden lg:flex flex-col rounded-2xl bg-paper border border-line overflow-hidden h-full">
@@ -252,8 +232,7 @@ export function CompaniesSidebar({ status, routeInfo }: PanelProps) {
 
 export function CompaniesBottomSheet({ status, routeInfo }: PanelProps) {
   const [open, setOpen] = useState(false);
-  const panelState = usePanelState(status, routeInfo);
-
+  const panelState = usePanelState(status);
   const [autoOpened, setAutoOpened] = useState(false);
   useEffect(() => {
     if (panelState === "results" && !autoOpened) {

@@ -12,6 +12,8 @@ import { useVapiCall } from "@/hooks/useVapiCall";
 export default function HomePage() {
   const {
     status,
+    micStatus,
+    connectingStage,
     transcript,
     volumeLevel,
     isAssistantSpeaking,
@@ -25,7 +27,7 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      {status === "connecting" && <ConnectingOverlay />}
+      {status === "connecting" && <ConnectingOverlay stage={connectingStage} />}
 
       <DispatchHeader errorMessage={errorMessage} />
 
@@ -60,6 +62,7 @@ export default function HomePage() {
             />
             <CallControls
               status={status}
+              micStatus={micStatus}
               durationSeconds={durationSeconds}
               onStart={startCall}
               onEnd={endCall}
