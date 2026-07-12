@@ -140,35 +140,35 @@ function extractRouteFromAssistantLine(text: string): Partial<RouteInfo> | null 
   const t = text.trim();
 
   // Trajet/Route confirmed first — captures both cities in one shot
-  let m = t.match(/Trajet confirm[e\u00e9]\s*:\s*([^\u2192\n]+)\s*\u2192\s*([^\n.]+)/i);
+  let m = t.match(/Trajet confirm[e\u00e9]\s*[:,]\s*([^\u2192\n]+)\s*\u2192\s*([^\n.]+)/i);
   if (m?.[1] && m[2]) return { departure: titleCase(m[1].trim()), arrival: titleCase(m[2].trim()) };
 
-  m = t.match(/Route confirmed\s*:\s*([^\u2192\n]+)\s*\u2192\s*([^\n.]+)/i);
+  m = t.match(/Route confirmed\s*[:,]\s*([^\u2192\n]+)\s*\u2192\s*([^\n.]+)/i);
   if (m?.[1] && m[2]) return { departure: titleCase(m[1].trim()), arrival: titleCase(m[2].trim()) };
 
   // Departure
-  m = t.match(/Ville de d[e\u00e9]part\s*:\s*([^\n.]+)/i);
+  m = t.match(/Ville de d[e\u00e9]part\s*[:,]\s*([^\n.]+)/i);
   if (m?.[1]) return { departure: titleCase(m[1].trim()) };
 
-  m = t.match(/Departure city\s*:\s*([^\n.]+)/i);
+  m = t.match(/Departure city\s*[:,]\s*([^\n.]+)/i);
   if (m?.[1]) return { departure: titleCase(m[1].trim()) };
 
   // Arrival
-  m = t.match(/Ville d['\u2019]arriv[e\u00e9]e\s*:\s*([^\n.]+)/i);
+  m = t.match(/Ville d['\u2019]arriv[e\u00e9]e\s*[:,]\s*([^\n.]+)/i);
   if (m?.[1]) return { arrival: titleCase(m[1].trim()) };
 
-  m = t.match(/Arrival city\s*:\s*([^\n.]+)/i);
+  m = t.match(/Arrival city\s*[:,]\s*([^\n.]+)/i);
   if (m?.[1]) return { arrival: titleCase(m[1].trim()) };
 
   // Date
-  m = t.match(/Date\/p[e\u00e9]riode?\s*:\s*([^\n.]+)/i);
+  m = t.match(/Date\/p[e\u00e9]riode?\s*[:,]\s*([^\n.]+)/i);
   if (m?.[1]) return { date: m[1].trim() };
 
   // Service
-  m = t.match(/Service choisi\s*:\s*([^\n.]+)/i);
+  m = t.match(/Service choisi\s*[:,]\s*([^\n.]+)/i);
   if (m?.[1]) { const opt = parseServiceLabel(m[1]); if (opt) return { service: opt }; }
 
-  m = t.match(/Service selected\s*:\s*([^\n.]+)/i);
+  m = t.match(/Service selected\s*[:,]\s*([^\n.]+)/i);
   if (m?.[1]) { const opt = parseServiceLabel(m[1]); if (opt) return { service: opt }; }
 
   return null;

@@ -48,12 +48,13 @@ function usePanelState(status: CallStatus, routeInfo: RouteInfo): PanelState {
   if (status === "idle" || status === "connecting") return "idle";
   const hasAnyCity = Boolean(routeInfo.departure || routeInfo.arrival);
   const hasBothCities = Boolean(routeInfo.departure && routeInfo.arrival);
-  if (status === "active") {
-    if (hasBothCities) return "results";
-    if (hasAnyCity) return "searching";
-    return "idle";
-  }
-  return hasAnyCity ? "results" : "idle";
+  // Same rule whether the call is still active or has ended — otherwise the
+  // panel can appear to "pop" straight to results right as the call is cut,
+  // driven by a looser post-call condition rather than by the route actually
+  // being complete.
+  if (hasBothCities) return "results";
+  if (hasAnyCity) return "searching";
+  return "idle";
 }
 
 // ── Relevance matching ──────────────────────────────────────────────────────
