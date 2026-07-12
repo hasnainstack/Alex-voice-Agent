@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unexpected tool call" }, { status: 400 });
   }
 
-  const callId = payload.message?.call?.id ?? "";
+  const callId = "latest";
   const rawArgs = toolCall.function.arguments;
   const args = (typeof rawArgs === "string" ? JSON.parse(rawArgs) : rawArgs) as Partial<RouteInfo>;
 

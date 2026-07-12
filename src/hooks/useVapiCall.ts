@@ -211,11 +211,9 @@ function extractRouteFromTranscript(entries: TranscriptEntry[]): RouteInfo {
 
   const userEntries = entries.filter((e) => e.speaker === "user");
 
-  for (let i = userEntries.length - 1; i >= 0; i--) {
-    const entry = userEntries[i];
-    if (!entry) continue;
+  for (const entry of userEntries) {
     if (!departure) departure = extractCity(entry.text, DEPARTURE_PATTERNS);
-    if (!arrival) arrival = extractCity(entry.text, ARRIVAL_HIGH_PATTERNS);
+    if (!arrival)   arrival   = extractCity(entry.text, ARRIVAL_HIGH_PATTERNS);
     if (!arrival && !arrivalLow) arrivalLow = extractCity(entry.text, ARRIVAL_LOW_PATTERNS);
     if (departure && arrival) break;
   }
@@ -261,8 +259,6 @@ export function useVapiCall(): UseVapiCallResult {
   const transcriptRef    = useRef<TranscriptEntry[]>([]);
   const routeRef         = useRef<RouteInfo>({ departure: null, arrival: null, date: null, service: null });
   const durationRef      = useRef(0);
-  const callIdRef        = useRef<string | null>(null);
-  const [activeCallId, setActiveCallId] = useState<string | null>(null);
 
   const nextId = useCallback(() => {
     entryCounter.current += 1;
@@ -271,13 +267,13 @@ export function useVapiCall(): UseVapiCallResult {
 
   // ── Poll: receive structured route from webhook (save_route tool call) ────
   useEffect(() => {
-    if (!activeCallId) return;
+    if (status !== "active") return;
     const id = setInterval(async () => {
       try {
-        const res = await fetch(`/api/route-updates?callId=${encodeURIComponent(activeCallId)}`);
+        const res = await fetch("/api/route-updates");
         if (!res.ok) return;
         const patch = await res.json() as Partial<RouteInfo>;
-        if (!patch) return;
+        if (!patch || (!patch.departure && !patch.arrival && !patch.date && !patch.service)) return;
         setRouteInfo((prev) => {
           const next = mergeRoute(prev, patch);
           routeRef.current = next;
@@ -286,7 +282,7 @@ export function useVapiCall(): UseVapiCallResult {
       } catch { /* network error */ }
     }, 2000);
     return () => clearInterval(id);
-  }, [activeCallId]);
+  }, [status]);
 
   // Wire Vapi events once the SDK is loaded
   useEffect(() => {
@@ -318,8 +314,6 @@ export function useVapiCall(): UseVapiCallResult {
         setIsAssistantSpeaking(false);
         setVolumeLevel(0);
         if (durationInterval.current) { clearInterval(durationInterval.current); durationInterval.current = null; }
-        callIdRef.current = null;
-        setActiveCallId(null);
         const finalRoute = extractRouteFromTranscript(transcriptRef.current);
         const merged = mergeRoute(routeRef.current, finalRoute);
         setRouteInfo(merged);
@@ -371,7 +365,7 @@ export function useVapiCall(): UseVapiCallResult {
         const assistantPatch =
           message.role === "assistant" ? extractRouteFromAssistantLine(entry.text) : null;
 
-        // NLP fallback: only fill cities not yet known
+        // NLP fallback: fill any cities not yet known
         let merged = mergeRoute(routeRef.current, assistantPatch);
         if (!merged.departure || !merged.arrival) {
           const nlp = extractRouteFromTranscript(next);
@@ -439,10 +433,7 @@ export function useVapiCall(): UseVapiCallResult {
       T["vapiStart"] = performance.now();
       console.log(`[vapi] vapi.start() called — ${Math.round(T["vapiStart"]! - T["click"]!)}ms after click`);
 
-      const call = await vapi.start(getAssistantId());
-      const id = (call as { id?: string })?.id ?? null;
-      callIdRef.current = id;
-      if (id) setActiveCallId(id);
+      await vapi.start(getAssistantId());
     } catch (err: unknown) {
       const name = err instanceof Error ? err.name : "";
       const message = err instanceof Error ? err.message : "";

@@ -2,8 +2,7 @@ export const runtime = "nodejs";
 
 import { getLatestRoute } from "@/lib/route-store";
 
-export async function GET(req: Request) {
-  const callId = new URL(req.url).searchParams.get("callId") ?? "";
-  const route = getLatestRoute(callId);
+export async function GET() {
+  const route = getLatestRoute("latest");
   return Response.json(route ?? null);
 }
