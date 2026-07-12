@@ -7,6 +7,16 @@ import type { RouteInfo } from "@/types/call";
 
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET ?? "";
 
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
+}
+
 function verifyBearer(authHeader: string | null): boolean {
   if (!WEBHOOK_SECRET) return true;
   if (!authHeader) return false;
@@ -20,7 +30,7 @@ function verifyBearer(authHeader: string | null): boolean {
 
 export async function POST(req: NextRequest) {
   if (!verifyBearer(req.headers.get("authorization"))) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: CORS_HEADERS });
   }
 
   const payload = await req.json() as {
@@ -32,7 +42,7 @@ export async function POST(req: NextRequest) {
 
   const toolCall = payload.message?.toolCallList?.[0];
   if (!toolCall || toolCall.function?.name !== "save_route") {
-    return NextResponse.json({ error: "Unexpected tool call" }, { status: 400 });
+    return NextResponse.json({ error: "Unexpected tool call" }, { status: 400, headers: CORS_HEADERS });
   }
 
   const callId = "latest";
@@ -46,7 +56,8 @@ export async function POST(req: NextRequest) {
     service:   args.service   ?? null,
   });
 
-  return NextResponse.json({
-    results: [{ toolCallId: toolCall.id, result: `Saved: ${JSON.stringify(args)}` }],
-  });
+  return NextResponse.json(
+    { results: [{ toolCallId: toolCall.id, result: `Saved: ${JSON.stringify(args)}` }] },
+    { headers: CORS_HEADERS }
+  );
 }
