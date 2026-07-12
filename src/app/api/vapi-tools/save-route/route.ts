@@ -1,33 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { emitRouteUpdate } from "@/lib/route-emitter";
+import { broadcastRouteUpdate } from "@/lib/sse-broadcast";
 import type { RouteInfo } from "@/types/call";
 
-const VAPI_WEBHOOK_SECRET = process.env.VAPI_WEBHOOK_SECRET ?? "";
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET ?? "";
 
-function verifySignature(rawBody: string, signature: string | null): boolean {
-  if (!signature || !VAPI_WEBHOOK_SECRET) return !VAPI_WEBHOOK_SECRET; // skip if no secret configured
-  const expected = crypto
-    .createHmac("sha256", VAPI_WEBHOOK_SECRET)
-    .update(rawBody)
-    .digest("hex");
+function verifyBearer(authHeader: string | null): boolean {
+  if (!WEBHOOK_SECRET) return true; // not configured — allow (dev only)
+  if (!authHeader) return false;
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
   try {
-    return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+    return crypto.timingSafeEqual(
+      Buffer.from(token),
+      Buffer.from(WEBHOOK_SECRET)
+    );
   } catch {
-    return false;
+    return false; // length mismatch → not equal
   }
 }
 
 export async function POST(req: NextRequest) {
-  const rawBody = await req.text();
-  const signature = req.headers.get("x-vapi-signature");
-
-  if (!verifySignature(rawBody, signature)) {
-    return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+  if (!verifyBearer(req.headers.get("authorization"))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const rawBody = await req.text();
   const payload = JSON.parse(rawBody) as {
     message?: {
+      call?: { id?: string };
       toolCalls?: Array<{
         id: string;
         function?: { name: string; arguments: unknown };
@@ -41,18 +41,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unexpected tool call" }, { status: 400 });
   }
 
+  const callId = payload.message?.call?.id ?? "";
   const args = toolCall.function.arguments as Partial<RouteInfo>;
 
-  // Broadcast to any listening SSE clients (the frontend)
-  emitRouteUpdate({
+  broadcastRouteUpdate(callId, {
     departure: args.departure ?? null,
     arrival:   args.arrival   ?? null,
     date:      args.date      ?? null,
     service:   args.service   ?? null,
   });
-
-  // Optional: persist to DB here
-  // await db.leads.upsert({ callId: payload.message.call.id, ...args });
 
   return NextResponse.json({
     results: [{ toolCallId: toolCall.id, result: `Saved: ${JSON.stringify(args)}` }],
