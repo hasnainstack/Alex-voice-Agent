@@ -12,7 +12,6 @@ import {
 import {
   CallStatus,
   RouteInfo,
-  RouteUpdateEvent,
   ServiceOption,
   CallSummary,
   TranscriptEntry,
@@ -270,22 +269,23 @@ export function useVapiCall(): UseVapiCallResult {
     return `entry-${entryCounter.current}`;
   }, []);
 
-  // ── SSE: receive structured route from webhook (save_route tool call) ────
+  // ── Poll: receive structured route from webhook (save_route tool call) ────
   useEffect(() => {
     if (!activeCallId) return;
-    const es = new EventSource(`/api/route-updates?callId=${encodeURIComponent(activeCallId)}`);
-    es.onmessage = (e: MessageEvent) => {
+    const id = setInterval(async () => {
       try {
-        const patch = JSON.parse(e.data as string) as RouteUpdateEvent;
-        if (patch.callId && patch.callId !== activeCallId) return;
+        const res = await fetch(`/api/route-updates?callId=${encodeURIComponent(activeCallId)}`);
+        if (!res.ok) return;
+        const patch = await res.json() as Partial<RouteInfo>;
+        if (!patch) return;
         setRouteInfo((prev) => {
           const next = mergeRoute(prev, patch);
           routeRef.current = next;
           return next;
         });
-      } catch { /* malformed */ }
-    };
-    return () => es.close();
+      } catch { /* network error */ }
+    }, 2000);
+    return () => clearInterval(id);
   }, [activeCallId]);
 
   // Wire Vapi events once the SDK is loaded
