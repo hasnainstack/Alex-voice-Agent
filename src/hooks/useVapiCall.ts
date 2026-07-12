@@ -263,6 +263,7 @@ export function useVapiCall(): UseVapiCallResult {
   const routeRef         = useRef<RouteInfo>({ departure: null, arrival: null, date: null, service: null });
   const durationRef      = useRef(0);
   const callIdRef        = useRef<string | null>(null);
+  const [activeCallId, setActiveCallId] = useState<string | null>(null);
 
   const nextId = useCallback(() => {
     entryCounter.current += 1;
@@ -271,12 +272,12 @@ export function useVapiCall(): UseVapiCallResult {
 
   // ── SSE: receive structured route from webhook (save_route tool call) ────
   useEffect(() => {
-    if (status !== "active" || !callIdRef.current) return;
-    const es = new EventSource(`/api/route-updates?callId=${encodeURIComponent(callIdRef.current)}`);
+    if (!activeCallId) return;
+    const es = new EventSource(`/api/route-updates?callId=${encodeURIComponent(activeCallId)}`);
     es.onmessage = (e: MessageEvent) => {
       try {
         const patch = JSON.parse(e.data as string) as RouteUpdateEvent;
-        if (patch.callId && patch.callId !== callIdRef.current) return;
+        if (patch.callId && patch.callId !== activeCallId) return;
         setRouteInfo((prev) => {
           const next = mergeRoute(prev, patch);
           routeRef.current = next;
@@ -285,7 +286,7 @@ export function useVapiCall(): UseVapiCallResult {
       } catch { /* malformed */ }
     };
     return () => es.close();
-  }, [status]);
+  }, [activeCallId]);
 
   // Wire Vapi events once the SDK is loaded
   useEffect(() => {
@@ -318,6 +319,7 @@ export function useVapiCall(): UseVapiCallResult {
         setVolumeLevel(0);
         if (durationInterval.current) { clearInterval(durationInterval.current); durationInterval.current = null; }
         callIdRef.current = null;
+        setActiveCallId(null);
         const finalRoute = extractRouteFromTranscript(transcriptRef.current);
         const merged = mergeRoute(routeRef.current, finalRoute);
         setRouteInfo(merged);
@@ -438,7 +440,9 @@ export function useVapiCall(): UseVapiCallResult {
       console.log(`[vapi] vapi.start() called — ${Math.round(T["vapiStart"]! - T["click"]!)}ms after click`);
 
       const call = await vapi.start(getAssistantId());
-      callIdRef.current = (call as { id?: string })?.id ?? null;
+      const id = (call as { id?: string })?.id ?? null;
+      callIdRef.current = id;
+      if (id) setActiveCallId(id);
     } catch (err: unknown) {
       const name = err instanceof Error ? err.name : "";
       const message = err instanceof Error ? err.message : "";
