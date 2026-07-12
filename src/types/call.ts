@@ -4,9 +4,13 @@
  */
 export type CallStatus = "idle" | "connecting" | "active" | "ended" | "error";
 
+export type ServiceOption = "economy" | "standard" | "comfort" | "storage" | null;
+
 export interface RouteInfo {
   departure: string | null;
   arrival: string | null;
+  date: string | null;
+  service: ServiceOption;
 }
 
 export interface CallSummary {
@@ -37,6 +41,14 @@ export interface VapiTranscriptMessage {
   role: Speaker;
   transcript: string;
   transcriptType: "partial" | "final";
+}
+
+/**
+ * Payload pushed over the SSE stream by /api/route-updates.
+ * callId lets the client drop updates not for its own call.
+ */
+export interface RouteUpdateEvent extends Partial<RouteInfo> {
+  callId?: string;
 }
 
 export function isVapiTranscriptMessage(
