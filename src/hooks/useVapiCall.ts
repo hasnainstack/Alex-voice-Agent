@@ -139,45 +139,37 @@ function parseServiceLabel(raw: string): Exclude<ServiceOption, null> | null {
 function extractRouteFromAssistantLine(text: string): Partial<RouteInfo> | null {
   const t = text.trim();
 
-  // French city labels
-  let m = t.match(/Ville de d\u00e9part\s*:\s*([^.\n]+)/i);
-  if (m?.[1]) return { departure: titleCase(m[1].trim()) };
-
-  m = t.match(/^Ville d'arriv\u00e9e\s*:\s*(.+)$/i);
-  if (m?.[1]) return { arrival: titleCase(m[1].trim()) };
-
-  m = t.match(/^Trajet confirm\u00e9\s*:\s*(.+?)\s*\u2192\s*(.+)$/i);
+  // Trajet/Route confirmed first — captures both cities in one shot
+  let m = t.match(/Trajet confirm[e\u00e9]\s*:\s*([^\u2192\n]+)\s*\u2192\s*([^\n.]+)/i);
   if (m?.[1] && m[2]) return { departure: titleCase(m[1].trim()), arrival: titleCase(m[2].trim()) };
 
-  // English city labels
-  m = t.match(/^Departure city\s*:\s*(.+)$/i);
-  if (m?.[1]) return { departure: titleCase(m[1].trim()) };
-
-  m = t.match(/^Arrival city\s*:\s*(.+)$/i);
-  if (m?.[1]) return { arrival: titleCase(m[1].trim()) };
-
-  m = t.match(/^Route confirmed\s*:\s*(.+?)\s*\u2192\s*(.+)$/i);
+  m = t.match(/Route confirmed\s*:\s*([^\u2192\n]+)\s*\u2192\s*([^\n.]+)/i);
   if (m?.[1] && m[2]) return { departure: titleCase(m[1].trim()), arrival: titleCase(m[2].trim()) };
 
-  // Date — FR: "Date/période : ..." EN: "Date/period : ..."
-  m = t.match(/^Date\/p[e\u00e9]riode?\s*:\s*(.+)$/i);
+  // Departure
+  m = t.match(/Ville de d[e\u00e9]part\s*:\s*([^\n.]+)/i);
+  if (m?.[1]) return { departure: titleCase(m[1].trim()) };
+
+  m = t.match(/Departure city\s*:\s*([^\n.]+)/i);
+  if (m?.[1]) return { departure: titleCase(m[1].trim()) };
+
+  // Arrival
+  m = t.match(/Ville d['\u2019]arriv[e\u00e9]e\s*:\s*([^\n.]+)/i);
+  if (m?.[1]) return { arrival: titleCase(m[1].trim()) };
+
+  m = t.match(/Arrival city\s*:\s*([^\n.]+)/i);
+  if (m?.[1]) return { arrival: titleCase(m[1].trim()) };
+
+  // Date
+  m = t.match(/Date\/p[e\u00e9]riode?\s*:\s*([^\n.]+)/i);
   if (m?.[1]) return { date: m[1].trim() };
 
-  // Service — exact label (FR). This is the piece that was missing: the
-  // prompt now instructs Alex to say this line the moment the caller states
-  // a preference, mirroring how city labels already work reliably.
-  m = t.match(/^Service choisi\s*:\s*(.+)$/i);
-  if (m?.[1]) {
-    const opt = parseServiceLabel(m[1]);
-    if (opt) return { service: opt };
-  }
+  // Service
+  m = t.match(/Service choisi\s*:\s*([^\n.]+)/i);
+  if (m?.[1]) { const opt = parseServiceLabel(m[1]); if (opt) return { service: opt }; }
 
-  // Service — exact label (EN)
-  m = t.match(/^Service selected\s*:\s*(.+)$/i);
-  if (m?.[1]) {
-    const opt = parseServiceLabel(m[1]);
-    if (opt) return { service: opt };
-  }
+  m = t.match(/Service selected\s*:\s*([^\n.]+)/i);
+  if (m?.[1]) { const opt = parseServiceLabel(m[1]); if (opt) return { service: opt }; }
 
   return null;
 }
