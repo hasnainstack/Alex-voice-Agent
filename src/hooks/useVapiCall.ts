@@ -269,34 +269,25 @@ function mergeRouteForce(prev: RouteInfo, patch: Partial<RouteInfo>): RouteInfo 
 // ---------------------------------------------------------------------------
 
 function extractClientName(entries: TranscriptEntry[]): string | null {
-  // Alex confirms the name after asking — look for "[Name], je vais vous poser" or "Parfait [Name]" or "D'accord [Name]"
   for (const e of entries) {
     if (e.speaker !== "assistant") continue;
-    const m = e.text.match(/(?:Parfait|D'accord|Très bien|Bonjour|Ok|Okay)[,.]?\s+([A-ZÀ-Ÿ][a-zà-ÿ]+(?:\s[A-ZÀ-Ÿ][a-zà-ÿ]+)?)[,.]?\s+(?:je|on|nous|I'll|I will)/i);
+    // require a real capital first letter — split the flags so /i
+    // doesn't blow away the whole point of [A-ZÀ-Ÿ]
+    const m = e.text.match(
+      new RegExp(`(?:Parfait|D'accord|Très bien|Bonjour|Ok|Okay)[,.]?\\s+([A-ZÀ-Ÿ][a-zà-ÿ]+(?:\\s[A-ZÀ-Ÿ][a-zà-ÿ]+)?)[,.]?\\s+(?:je|on|nous|I'll|I will)`)
+    );
     if (m?.[1]) return m[1].trim();
   }
-  // Fallback: user introduces themselves
-  for (const e of entries) {
-    if (e.speaker !== "user") continue;
-    const m = e.text.match(/(?:je m'appelle|mon nom est|c'est|my name is|i'm|i am)\s+([A-ZÀ-Ÿ][a-zà-ÿ]+(?:\s[A-ZÀ-Ÿ][a-zà-ÿ]+)?)/i);
-    if (m?.[1]) return m[1].trim();
+  const joined = entries.filter(e => e.speaker === "user").map(e => e.text).join(" ");
+  const m = joined.match(/(?:je m'appelle|mon nom est|c'est|my name is|i'm|i am)\s+([A-ZÀ-Ÿ][a-zà-ÿ]+(?:\s[A-ZÀ-Ÿ][a-zà-ÿ]+)?)/i);
+  return m?.[1]?.trim() ?? null;
+
   }
-  return null;
-}
+  
 
 function extractEmail(entries: TranscriptEntry[]): string | null {
-  // 1. Real @ address already in transcript (copy-pasted or typed)
   const emailRe = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/;
-
-  // 2. Spoken form — Vapi transcribes these variations:
-  //    "john at gmail dot com"
-  //    "john arobase gmail point com"
-  //    "john at gmail.com"  (mixed)
-  //    "john@gmail dot com" (partial symbol)
   const spokenRe = /([a-z0-9][a-z0-9._+\-]{0,40})\s+(?:at|@|arobase|chez)\s+([a-z0-9][a-z0-9.\-]{1,40})\s+(?:dot|point|\.)\s*([a-z]{2,6})/i;
-
-  // 3. Underscore spoken as "underscore" or "tiret bas"
-  //    "john underscore doe at gmail dot com"
   const normaliseSpoken = (t: string) =>
     t.replace(/\bunderscore\b/gi, "_")
      .replace(/\btiret\s*bas\b/gi, "_")
@@ -306,21 +297,19 @@ function extractEmail(entries: TranscriptEntry[]): string | null {
      .replace(/\barobase\b/gi, "@")
      .replace(/\bchez\b/gi, "@");
 
-  // Scan all entries — email appears in user speech
-  for (const e of entries) {
-    // Try raw @ match first
-    const m1 = e.text.match(emailRe);
-    if (m1) return m1[0].toLowerCase();
+  // join across entries so a split like "jack123" | "at gmail dot com"
+  // is matched as one continuous phrase, not two dead ends
+  const joined = entries.filter(e => e.speaker === "user").map(e => e.text).join(" ");
 
-    // Normalise spoken words then try @ match again
-    const normalised = normaliseSpoken(e.text);
-    const m2 = normalised.match(emailRe);
-    if (m2) return m2[0].toLowerCase();
+  const m1 = joined.match(emailRe);
+  if (m1) return m1[0].toLowerCase();
 
-    // Try spoken pattern on original
-    const m3 = e.text.match(spokenRe);
-    if (m3) return `${m3[1]}@${m3[2]}.${m3[3]}`.toLowerCase().replace(/\s+/g, "");
-  }
+  const m2 = normaliseSpoken(joined).match(emailRe);
+  if (m2) return m2[0].toLowerCase();
+
+  const m3 = joined.match(spokenRe);
+  if (m3) return `${m3[1]}@${m3[2]}.${m3[3]}`.toLowerCase().replace(/\s+/g, "");
+
   return null;
 }
 
