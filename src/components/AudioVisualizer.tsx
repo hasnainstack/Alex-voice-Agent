@@ -35,7 +35,7 @@ export function AudioVisualizer({ status, volumeLevel, isAssistantSpeaking }: Au
   const barColor = isActive ? "bg-beacon" : isLive ? "bg-paper/50" : "bg-paper/20";
 
   return (
-    <div className="rounded-2xl bg-surface flex flex-col items-center justify-between min-h-[420px] relative overflow-hidden py-7 px-6">
+    <div className="rounded-2xl bg-surface flex flex-col items-center justify-between min-h-[420px] relative overflow-hidden py-7 px-6 text-center">
 
       {/* Radial fade over grid — darkens toward edges, clears center */}
       <div
@@ -69,7 +69,8 @@ export function AudioVisualizer({ status, volumeLevel, isAssistantSpeaking }: Au
         </div>
       </div>
 
-      {/* ── Orb ── */}
+      {/* ── Orb + caption ── */}
+      <div className="flex-1 flex flex-col items-center justify-center gap-5">
       <div className="relative flex items-center justify-center" style={{ width: 240, height: 240 }}>
 
         {/* Pulse rings — always visible when live, idle rings are static */}
@@ -136,18 +137,21 @@ export function AudioVisualizer({ status, volumeLevel, isAssistantSpeaking }: Au
         </div>
       </div>
 
+      {/* Caption beneath orb */}
+      <p className="font-mono text-[10px] tracking-[0.18em] text-ink400">
+        {status === "idle"       ? "EN ATTENTE DE CONNEXION…"   :
+         status === "connecting" ? "CONNEXION EN COURS…"         :
+         status === "active"     ? (isAssistantSpeaking ? "ALEX S\u2019EXPRIME…" : "ALEX VOUS ÉCOUTE…") :
+         status === "ended"      ? "APPEL TERMINÉ."              :
+                                   "ERREUR DE CONNEXION"}
+      </p>
+      </div>
+
       {/* ── Bottom status ── */}
       <div className="relative w-full flex flex-col items-center gap-2">
-        {/* Sub-label */}
-        <p className="font-mono text-[10px] tracking-[0.16em] text-ink400 text-center">
-          {status === "active"
-            ? (isAssistantSpeaking ? "ALEX S'EXPRIME — VEUILLEZ ÉCOUTER" : "EN ATTENTE DE VOTRE RÉPONSE")
-            : meta.sub.toUpperCase()}
-        </p>
-
         {/* Connecting progress dots */}
         {status === "connecting" && (
-          <div className="flex gap-1.5 mt-1">
+          <div className="flex gap-1.5">
             {[0, 150, 300].map((d) => (
               <div
                 key={d}

@@ -60,14 +60,10 @@ export default function HomePage() {
               volumeLevel={volumeLevel}
               routeInfo={routeInfo}
             />
-            {/* Connector arrow — desktop only */}
-            <div className="hidden lg:flex items-center gap-2 px-1">
-              <div className="flex-1 h-px bg-gradient-to-r from-transparent via-line to-transparent" />
-              <svg className="w-3 h-3 text-ink400 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-              </svg>
-              <div className="flex-1 h-px bg-gradient-to-r from-transparent via-line to-transparent" />
-            </div>
+            {/* Step label */}
+            <p className="font-mono text-[10px] tracking-[0.18em] text-ink400 px-1">
+              ÉTAPE SUIVANTE
+            </p>
             <CallControls
               status={status}
               micStatus={micStatus}
