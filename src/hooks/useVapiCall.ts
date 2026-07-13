@@ -149,12 +149,65 @@ function extractRouteFromAssistantLine(text: string): Partial<RouteInfo> | null 
     if (m?.[1]) patch.arrival = titleCase(m[1].trim());
   }
 
-  // Date — scan the whole turn, not just a single label line
+  // Date — explicit label from system prompt
   m = t.match(/Date(?:\/p[e\u00e9]riode?)?\s*[:,]\s*([^\n.!?]+)/i)
     ?? t.match(/p[e\u00e9]riode?\s*[:,]\s*([^\n.!?]+)/i);
   if (m?.[1]) patch.date = m[1].trim();
 
   return Object.keys(patch).length ? patch : null;
+}
+
+// ---------------------------------------------------------------------------
+// Date extraction — scans all entries (user + assistant)
+// ---------------------------------------------------------------------------
+
+const MONTHS_FR = "(?:janvier|f(?:e|\u00e9)vrier|mars|avril|mai|juin|juillet|ao(?:u|\u00fb)t|septembre|octobre|novembre|d(?:e|\u00e9)cembre)";
+const MONTHS_EN = "(?:january|february|march|april|may|june|july|august|september|october|november|december)";
+
+const DATE_PATTERNS: RegExp[] = [
+  // Explicit numeric: 15/03/2025, 15-03-2025, 15.03.2025
+  /\b(\d{1,2}[\/.]\d{1,2}(?:[\/.]\d{2,4})?)\b/,
+  /\b(\d{1,2}-\d{1,2}(?:-\d{2,4})?)\b/,
+  // "le 15 mars", "le 15 mars 2025"
+  new RegExp(`\\ble\\s+(\\d{1,2}\\s+${MONTHS_FR}(?:\\s+\\d{4})?)`, "i"),
+  // "15 mars", "15 mars 2025" (without "le")
+  new RegExp(`\\b(\\d{1,2}\\s+${MONTHS_FR}(?:\\s+\\d{4})?)`, "i"),
+  // "mars 2025", "juillet 2025"
+  new RegExp(`\\b(${MONTHS_FR}\\s+\\d{4})`, "i"),
+  // "d\u00e9but mars", "fin avril", "mi-juillet", "courant juin"
+  new RegExp(`\\b((?:d[e\u00e9]but|fin|mi[-\\s]|courant|early|end\\s+of)\\s*${MONTHS_FR})`, "i"),
+  // "le mois prochain", "le mois suivant"
+  /\b((?:le\s+)?mois\s+(?:prochain|suivant))\b/i,
+  // "la semaine prochaine"
+  /\b((?:la\s+)?semaine\s+(?:prochaine|suivante|du\s+\d{1,2}))\b/i,
+  // "dans X semaines/mois"
+  /\b(dans\s+\d+\s+(?:semaines?|mois))\b/i,
+  // English: "March 15", "March 15 2025"
+  new RegExp(`\\b(${MONTHS_EN}\\s+\\d{1,2}(?:st|nd|rd|th)?(?:\\s+\\d{4})?)`, "i"),
+  // English: "early/mid/end of March"
+  new RegExp(`\\b((?:early|mid|end\\s+of)\\s+${MONTHS_EN})`, "i"),
+  // "next month", "next week"
+  /\b(next\s+(?:month|week))\b/i,
+  // "in X weeks/months"
+  /\b(in\s+\d+\s+(?:weeks?|months?))\b/i,
+];
+
+function extractDate(entries: TranscriptEntry[]): string | null {
+  // Prefer assistant turns first (Alex echoes confirmed date)
+  // then fall back to user turns
+  const ordered = [
+    ...entries.filter((e) => e.speaker === "assistant"),
+    ...entries.filter((e) => e.speaker === "user"),
+  ];
+  for (const e of ordered) {
+    // Skip very short turns unlikely to contain a date
+    if (e.text.length < 4) continue;
+    for (const re of DATE_PATTERNS) {
+      const m = e.text.match(re);
+      if (m?.[1]) return m[1].trim();
+    }
+  }
+  return null;
 }
 
 function mergeRoute(prev: RouteInfo, patch: Partial<RouteInfo> | null): RouteInfo {
@@ -374,6 +427,7 @@ export function useVapiCall(): UseVapiCallResult {
         const allEntries = transcriptRef.current;
         const enriched: RouteInfo = {
           ...merged,
+          date:        merged.date        ?? extractDate(allEntries),
           clientName:  merged.clientName  ?? extractClientName(allEntries),
           email:       merged.email       ?? extractEmail(allEntries),
           phone:       merged.phone       ?? extractPhone(allEntries),
