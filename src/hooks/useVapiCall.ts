@@ -126,15 +126,6 @@ function extractCity(text: string, patterns: RegExp[]): string | null {
   return null;
 }
 
-function parseServiceLabel(raw: string): string | null {
-  const s = raw.trim().toLowerCase();
-  if (s.includes("garde-meubles") || s.includes("storage")) return "storage";
-  if (s.includes("économique") || s.includes("economique") || s.includes("economy")) return "economy";
-  if (s.includes("confort") || s.includes("comfort")) return "comfort";
-  if (s.includes("standard")) return "standard";
-  return null;
-}
-
 function extractRouteFromAssistantLine(text: string): Partial<RouteInfo> | null {
   const t = text.trim();
   const patch: Partial<RouteInfo> = {};
@@ -245,8 +236,6 @@ function extractHousingType(entries: TranscriptEntry[]): string | null {
   return null;
 }
 
-function extractRequestedServices(_entries: TranscriptEntry[]): string[] { return []; }
-
 function inferLeadStatus(entries: TranscriptEntry[], duration: number): import("@/types/call").LeadStatus {
   const fullText = entries.map((e) => e.text).join(" ").toLowerCase();
   if (/pas intéressé|plus tard|rappeler|no thanks|not interested|annuler|cancel/i.test(fullText)) return "not_interested";
@@ -335,8 +324,10 @@ export function useVapiCall(): UseVapiCallResult {
       try {
         const res = await fetch("/api/route-updates");
         if (!res.ok) return;
-        const patch = await res.json() as Partial<RouteInfo>;
-        if (!patch || Object.values(patch).every((v) => v === null || v === undefined)) return;
+        const patch = await res.json() as Partial<RouteInfo> | null;
+        if (!patch || typeof patch !== "object") return;
+        const vals = Object.values(patch);
+        if (vals.every((v) => v === null || v === undefined || (Array.isArray(v) && v.length === 0))) return;
         setRouteInfo((prev) => {
           const next = mergeRoute(prev, patch);
           routeRef.current = next;
