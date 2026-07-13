@@ -15,11 +15,10 @@ function formatClock(ts: number) {
   });
 }
 
-const SERVICE_LABELS: Record<string, string> = {
-  economy: "Économique",
-  standard: "Standard",
-  comfort: "Confort",
-  storage: "Garde-meubles",
+const LEAD_LABELS: Record<string, { label: string; color: string }> = {
+  qualified:      { label: "Qualifié ✓",        color: "text-confirmed" },
+  needs_followup: { label: "Suivi nécessaire",   color: "text-beacon" },
+  not_interested: { label: "Non intéressé",      color: "text-ink400" },
 };
 
 const BLANK = "—";
@@ -41,7 +40,7 @@ function Row({ label, value, highlight }: RowProps) {
 export function CallSummaryCard({ summary }: { summary: CallSummary }) {
   const [transcriptOpen, setTranscriptOpen] = useState(false);
 
-  const serviceLabel = summary.service ? SERVICE_LABELS[summary.service] : null;
+  const leadMeta = summary.leadStatus ? LEAD_LABELS[summary.leadStatus] : null;
 
   return (
     <div className="rounded-2xl border border-confirmed/30 bg-white shadow-sm overflow-hidden animate-rise">
@@ -58,14 +57,21 @@ export function CallSummaryCard({ summary }: { summary: CallSummary }) {
         </span>
       </div>
 
-{/* ── Structured data grid ── */}
+      {leadMeta && (
+        <div className="px-5 pt-4 pb-0">
+          <span className={`font-mono text-[10px] tracking-[0.14em] font-semibold ${leadMeta.color}`}>
+            STATUT — {leadMeta.label}
+          </span>
+        </div>
+      )}
+
+      {/* ── Structured data grid ── */}
       <div className="px-5 py-4">
         <Row label="NOM"            value={summary.clientName} highlight />
         <Row label="DÉPART"         value={summary.departure} highlight />
         <Row label="ARRIVÉE"        value={summary.arrival} highlight />
         <Row label="DATE SOUHAITÉE" value={summary.date} />
         <Row label="EMAIL"          value={summary.email} />
-        <Row label="SERVICE"        value={serviceLabel} />
       </div>
 
       {/* ── Transcript toggle ── */}

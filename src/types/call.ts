@@ -4,20 +4,17 @@
  */
 export type CallStatus = "idle" | "connecting" | "active" | "ended" | "error";
 
-export type ServiceOption = "economy" | "standard" | "comfort" | "storage" | null;
 export type LeadStatus = "qualified" | "needs_followup" | "not_interested" | null;
 
 export interface RouteInfo {
   departure: string | null;
   arrival: string | null;
   date: string | null;
-  service: ServiceOption;
   // enriched fields extracted from transcript
   clientName: string | null;
   email: string | null;
   phone: string | null;
   housingType: string | null;
-  requestedServices: string[];
   leadStatus: LeadStatus;
 }
 
@@ -26,12 +23,10 @@ export interface CallSummary {
   departure: string | null;
   arrival: string | null;
   date: string | null;
-  service: ServiceOption;
   clientName: string | null;
   email: string | null;
   phone: string | null;
   housingType: string | null;
-  requestedServices: string[];
   leadStatus: LeadStatus;
   transcript: TranscriptEntry[];
 }

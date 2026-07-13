@@ -3,7 +3,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { CallStatus, RouteInfo, ServiceOption } from "@/types/call";
+import { CallStatus, RouteInfo } from "@/types/call";
 
 interface Company {
   id: string;
@@ -93,7 +93,7 @@ function isInternationalRoute(routeInfo: RouteInfo): boolean {
   return !depFrench || !arrFrench;
 }
 
-const SERVICE_SPECIALTY_MAP: Record<NonNullable<ServiceOption>, string[]> = {
+const SERVICE_SPECIALTY_MAP: Record<string, string[]> = {
   economy:  ["Petit budget", "Étudiants", "Écologique", "Economy", "Express"],
   standard: ["Appartement", "Famille", "Maison", "Local", "Standard"],
   comfort:  ["Luxe", "Villa", "Objets précieux", "Piano", "Coffre-fort", "Objets lourds", "Premium"],
@@ -102,7 +102,6 @@ const SERVICE_SPECIALTY_MAP: Record<NonNullable<ServiceOption>, string[]> = {
 
 function rankCompanies(companies: Company[], routeInfo: RouteInfo): Array<Company & { isMatch: boolean; serviceMatch: boolean }> {
   const intl = isInternationalRoute(routeInfo);
-  const serviceSpecialties = routeInfo.service ? SERVICE_SPECIALTY_MAP[routeInfo.service] : null;
 
   const scored = companies.map((c) => {
     let score = 0;
@@ -112,12 +111,8 @@ function rankCompanies(companies: Company[], routeInfo: RouteInfo): Array<Compan
       if (matchesCity(c.cities, routeInfo.departure)) score += 2;
       if (matchesCity(c.cities, routeInfo.arrival)) score += 2;
     }
-    const serviceMatch = serviceSpecialties
-      ? c.specialties.some((s) => serviceSpecialties.some((ss) => normalize(s).includes(normalize(ss))))
-      : false;
-    if (serviceMatch) score += 3;
     score += c.rating / 10;
-    return { ...c, isMatch: score >= 2, serviceMatch, _score: score };
+    return { ...c, isMatch: score >= 2, serviceMatch: false, _score: score };
   });
 
   return scored
@@ -310,7 +305,7 @@ function IdleState() {
   );
 }
 
-const SERVICE_LABELS: Record<NonNullable<ServiceOption>, string> = {
+const SERVICE_LABELS: Record<string, string> = {
   economy:  "Formule Économique",
   standard: "Formule Standard",
   comfort:  "Formule Confort",
@@ -324,7 +319,7 @@ function ResultsState({ routeInfo }: { routeInfo: RouteInfo }) {
 
   return (
     <>
-      {/* Context chips — show what we know so far */}
+      {/* Context chips */}
       <div className="flex flex-wrap gap-1.5 mb-3">
         {routeInfo.date && (
           <span className="flex items-center gap-1 text-[10px] font-semibold bg-ink/5 border border-line rounded-full px-2 py-1">
@@ -332,14 +327,6 @@ function ResultsState({ routeInfo }: { routeInfo: RouteInfo }) {
               <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
             {routeInfo.date}
-          </span>
-        )}
-        {routeInfo.service && (
-          <span className="flex items-center gap-1 text-[10px] font-semibold bg-confirmed/10 border border-confirmed/20 text-confirmed rounded-full px-2 py-1">
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
-            {SERVICE_LABELS[routeInfo.service]}
           </span>
         )}
       </div>
