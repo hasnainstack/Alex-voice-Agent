@@ -177,11 +177,110 @@ function extractRouteFromAssistantLine(text: string): Partial<RouteInfo> | null 
 function mergeRoute(prev: RouteInfo, patch: Partial<RouteInfo> | null): RouteInfo {
   if (!patch) return prev;
   return {
-    departure: patch.departure ?? prev.departure,
-    arrival:   patch.arrival   ?? prev.arrival,
-    date:      patch.date      ?? prev.date,
-    service:   (patch.service !== undefined ? patch.service : prev.service) as ServiceOption,
+    departure:         patch.departure         ?? prev.departure,
+    arrival:           patch.arrival           ?? prev.arrival,
+    date:              patch.date              ?? prev.date,
+    service:           (patch.service !== undefined ? patch.service : prev.service) as ServiceOption,
+    clientName:        patch.clientName        ?? prev.clientName,
+    email:             patch.email             ?? prev.email,
+    phone:             patch.phone             ?? prev.phone,
+    housingType:       patch.housingType       ?? prev.housingType,
+    requestedServices: patch.requestedServices ?? prev.requestedServices,
+    leadStatus:        patch.leadStatus        ?? prev.leadStatus,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Enriched field extractors (transcript-based)
+// ---------------------------------------------------------------------------
+
+function extractClientName(entries: TranscriptEntry[]): string | null {
+  // Alex confirms the name after asking — look for "[Name], je vais vous poser" or "Parfait [Name]" or "D'accord [Name]"
+  for (const e of entries) {
+    if (e.speaker !== "assistant") continue;
+    const m = e.text.match(/(?:Parfait|D'accord|Très bien|Bonjour|Ok|Okay)[,.]?\s+([A-ZÀ-Ÿ][a-zà-ÿ]+(?:\s[A-ZÀ-Ÿ][a-zà-ÿ]+)?)[,.]?\s+(?:je|on|nous|I'll|I will)/i);
+    if (m?.[1]) return m[1].trim();
+  }
+  // Fallback: user introduces themselves
+  for (const e of entries) {
+    if (e.speaker !== "user") continue;
+    const m = e.text.match(/(?:je m'appelle|mon nom est|c'est|my name is|i'm|i am)\s+([A-ZÀ-Ÿ][a-zà-ÿ]+(?:\s[A-ZÀ-Ÿ][a-zà-ÿ]+)?)/i);
+    if (m?.[1]) return m[1].trim();
+  }
+  return null;
+}
+
+function extractEmail(entries: TranscriptEntry[]): string | null {
+  const emailRe = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/;
+  for (const e of entries) {
+    const m = e.text.match(emailRe);
+    if (m) return m[0].toLowerCase();
+  }
+  return null;
+}
+
+function extractPhone(entries: TranscriptEntry[]): string | null {
+  // French mobile / landline patterns
+  const phoneRe = /(?:\+33|0033|0)[\s.\-]?[1-9](?:[\s.\-]?\d{2}){4}/;
+  for (const e of entries) {
+    const m = e.text.replace(/\s+/g, " ").match(phoneRe);
+    if (m) return m[0].replace(/[\s.\-]/g, "");
+  }
+  return null;
+}
+
+function extractHousingType(entries: TranscriptEntry[]): string | null {
+  const patterns: [RegExp, string][] = [
+    [/\bstudio\b/i, "Studio"],
+    [/\b(?:t1|f1|1\s*pièce)\b/i, "T1"],
+    [/\b(?:t2|f2|2\s*pièces?)\b/i, "T2"],
+    [/\b(?:t3|f3|3\s*pièces?)\b/i, "T3"],
+    [/\b(?:t4|f4|4\s*pièces?)\b/i, "T4"],
+    [/\b(?:t5|f5|5\s*pièces?)\b/i, "T5+"],
+    [/\bmaison\b/i, "Maison"],
+    [/\bvilla\b/i, "Villa"],
+    [/\bappartement\b/i, "Appartement"],
+    [/\bloft\b/i, "Loft"],
+  ];
+  for (const e of entries) {
+    for (const [re, label] of patterns) {
+      if (re.test(e.text)) return label;
+    }
+  }
+  return null;
+}
+
+function extractRequestedServices(entries: TranscriptEntry[]): string[] {
+  const found = new Set<string>();
+  const checks: [RegExp, string][] = [
+    [/\bemballage|packing\b/i, "Emballage"],
+    [/\bdéballage|unpacking\b/i, "Déballage"],
+    [/\bgarde[\s-]meubles|storage\b/i, "Garde-meubles"],
+    [/\bdémontage|disassembl/i, "Démontage meubles"],
+    [/\bremontage|reassembl/i, "Remontage meubles"],
+    [/\bnettoyage|cleaning\b/i, "Nettoyage"],
+    [/\bpiano\b/i, "Transport piano"],
+    [/\bcave|box\b/i, "Cave / box"],
+    [/\bgrenier|attic\b/i, "Grenier"],
+    [/\bvéhicule|voiture|car\b/i, "Transport véhicule"],
+  ];
+  for (const e of entries) {
+    for (const [re, label] of checks) {
+      if (re.test(e.text)) found.add(label);
+    }
+  }
+  return [...found];
+}
+
+function inferLeadStatus(entries: TranscriptEntry[], duration: number): import("@/types/call").LeadStatus {
+  const fullText = entries.map((e) => e.text).join(" ").toLowerCase();
+  // Not interested signals
+  if (/pas intéressé|plus tard|rappeler|no thanks|not interested|annuler|cancel/i.test(fullText)) return "not_interested";
+  // Qualified: email collected or service chosen
+  if (/[@]/.test(fullText) || /économique|standard|confort|garde-meubles|economy|comfort|storage/i.test(fullText)) return "qualified";
+  // Short call with no route = needs follow-up
+  if (duration < 60) return "needs_followup";
+  return "needs_followup";
 }
 
 /**
@@ -210,7 +309,7 @@ function extractRouteFromTranscript(entries: TranscriptEntry[]): RouteInfo {
     if (departure && arrival) break;
   }
 
-  return { departure, arrival: arrival ?? arrivalLow, date: null, service: null };
+  return { departure, arrival: arrival ?? arrivalLow, date: null, service: null, clientName: null, email: null, phone: null, housingType: null, requestedServices: [], leadStatus: null };
 }
 
 // ---------------------------------------------------------------------------
@@ -243,13 +342,13 @@ export function useVapiCall(): UseVapiCallResult {
   const [isAssistantSpeaking, setIsAssistantSpeaking] = useState(false);
   const [errorMessage, setErrorMessage]   = useState<string | null>(null);
   const [durationSeconds, setDurationSeconds] = useState(0);
-  const [routeInfo, setRouteInfo] = useState<RouteInfo>({ departure: null, arrival: null, date: null, service: null });
+  const [routeInfo, setRouteInfo] = useState<RouteInfo>({ departure: null, arrival: null, date: null, service: null, clientName: null, email: null, phone: null, housingType: null, requestedServices: [], leadStatus: null });
   const [callSummary, setCallSummary]     = useState<CallSummary | null>(null);
 
   const durationInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const entryCounter     = useRef(0);
   const transcriptRef    = useRef<TranscriptEntry[]>([]);
-  const routeRef         = useRef<RouteInfo>({ departure: null, arrival: null, date: null, service: null });
+  const routeRef         = useRef<RouteInfo>({ departure: null, arrival: null, date: null, service: null, clientName: null, email: null, phone: null, housingType: null, requestedServices: [], leadStatus: null });
   const durationRef      = useRef(0);
 
   const nextId = useCallback(() => {
@@ -291,10 +390,10 @@ export function useVapiCall(): UseVapiCallResult {
         setErrorMessage(null);
         setTranscript([]);
         setDurationSeconds(0);
-        setRouteInfo({ departure: null, arrival: null, date: null, service: null });
+        setRouteInfo({ departure: null, arrival: null, date: null, service: null, clientName: null, email: null, phone: null, housingType: null, requestedServices: [], leadStatus: null });
         setCallSummary(null);
         transcriptRef.current = [];
-        routeRef.current = { departure: null, arrival: null, date: null, service: null };
+        routeRef.current = { departure: null, arrival: null, date: null, service: null, clientName: null, email: null, phone: null, housingType: null, requestedServices: [], leadStatus: null };
         durationRef.current = 0;
         durationInterval.current = setInterval(() => {
           setDurationSeconds((d) => { const n = d + 1; durationRef.current = n; return n; });
@@ -308,12 +407,31 @@ export function useVapiCall(): UseVapiCallResult {
         if (durationInterval.current) { clearInterval(durationInterval.current); durationInterval.current = null; }
         const finalRoute = extractRouteFromTranscript(transcriptRef.current);
         const merged = mergeRoute(routeRef.current, finalRoute);
-        setRouteInfo(merged);
+        // Enrich with transcript-extracted fields
+        const allEntries = transcriptRef.current;
+        const enriched: RouteInfo = {
+          ...merged,
+          clientName:        merged.clientName        ?? extractClientName(allEntries),
+          email:             merged.email             ?? extractEmail(allEntries),
+          phone:             merged.phone             ?? extractPhone(allEntries),
+          housingType:       merged.housingType       ?? extractHousingType(allEntries),
+          requestedServices: merged.requestedServices.length ? merged.requestedServices : extractRequestedServices(allEntries),
+          leadStatus:        inferLeadStatus(allEntries, durationRef.current),
+        };
+        setRouteInfo(enriched);
         setCallSummary({
-          duration: durationRef.current,
-          departure: merged.departure,
-          arrival: merged.arrival,
-          transcript: [...transcriptRef.current],
+          duration:          durationRef.current,
+          departure:         enriched.departure,
+          arrival:           enriched.arrival,
+          date:              enriched.date,
+          service:           enriched.service,
+          clientName:        enriched.clientName,
+          email:             enriched.email,
+          phone:             enriched.phone,
+          housingType:       enriched.housingType,
+          requestedServices: enriched.requestedServices,
+          leadStatus:        enriched.leadStatus,
+          transcript:        [...transcriptRef.current],
         });
         logTimings();
       };
