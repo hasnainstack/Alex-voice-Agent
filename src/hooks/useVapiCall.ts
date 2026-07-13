@@ -218,17 +218,16 @@ const DATE_PATTERNS: RegExp[] = [
 ];
 
 function extractDate(entries: TranscriptEntry[]): string | null {
-  // Prefer assistant turns first (Alex echoes confirmed date)
-  // then fall back to user turns
-  const ordered = [
-    ...entries.filter((e) => e.speaker === "assistant"),
-    ...entries.filter((e) => e.speaker === "user"),
-  ];
-  for (const e of ordered) {
-    // Skip very short turns unlikely to contain a date
-    if (e.text.length < 4) continue;
+  // join first — a spoken date can be split by STT into separate
+  // final segments, e.g. "quinze" | "mars 2025", and neither half
+  // alone matches any DATE_PATTERNS on its own
+  const assistantText = entries.filter(e => e.speaker === "assistant").map(e => e.text).join(" ");
+  const userText      = entries.filter(e => e.speaker === "user").map(e => e.text).join(" ");
+
+  for (const text of [assistantText, userText]) {
+    if (text.length < 4) continue;
     for (const re of DATE_PATTERNS) {
-      const m = e.text.match(re);
+      const m = text.match(re);
       if (m?.[1]) return m[1].trim();
     }
   }
@@ -313,15 +312,7 @@ function extractEmail(entries: TranscriptEntry[]): string | null {
   return null;
 }
 
-function extractPhone(entries: TranscriptEntry[]): string | null {
-  // French mobile / landline patterns
-  const phoneRe = /(?:\+33|0033|0)[\s.\-]?[1-9](?:[\s.\-]?\d{2}){4}/;
-  for (const e of entries) {
-    const m = e.text.replace(/\s+/g, " ").match(phoneRe);
-    if (m) return m[0].replace(/[\s.\-]/g, "");
-  }
-  return null;
-}
+
 
 function extractHousingType(entries: TranscriptEntry[]): string | null {
   const patterns: [RegExp, string][] = [
@@ -485,7 +476,7 @@ export function useVapiCall(): UseVapiCallResult {
           date:        merged.date        ?? extractDate(allEntries),
           clientName:  merged.clientName  ?? extractClientName(allEntries),
           email:       merged.email       ?? extractEmail(allEntries),
-          phone:       merged.phone       ?? extractPhone(allEntries),
+          // phone:       merged.phone       ?? extractPhone(allEntries),
           housingType: merged.housingType ?? extractHousingType(allEntries),
           leadStatus:  inferLeadStatus(allEntries, durationRef.current),
         };
