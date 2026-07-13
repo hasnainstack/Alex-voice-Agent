@@ -138,40 +138,47 @@ function parseServiceLabel(raw: string): Exclude<ServiceOption, null> | null {
 
 function extractRouteFromAssistantLine(text: string): Partial<RouteInfo> | null {
   const t = text.trim();
+  const patch: Partial<RouteInfo> = {};
 
-  // Trajet/Route confirmed first — captures both cities in one shot
-  let m = t.match(/Trajet confirm[e\u00e9]\s*[:,]\s*([^\u2192\n]+)\s*\u2192\s*([^\n.]+)/i);
-  if (m?.[1] && m[2]) return { departure: titleCase(m[1].trim()), arrival: titleCase(m[2].trim()) };
+  // Trajet/Route confirmed — captures both cities in one shot
+  let m = t.match(/Trajet confirm[e\u00e9]\s*[:,]\s*([^\u2192\n]+)\s*\u2192\s*([^\n.!?]+)/i);
+  if (m?.[1] && m[2]) { patch.departure = titleCase(m[1].trim()); patch.arrival = titleCase(m[2].trim()); }
 
-  m = t.match(/Route confirmed\s*[:,]\s*([^\u2192\n]+)\s*\u2192\s*([^\n.]+)/i);
-  if (m?.[1] && m[2]) return { departure: titleCase(m[1].trim()), arrival: titleCase(m[2].trim()) };
+  m = t.match(/Route confirmed\s*[:,]\s*([^\u2192\n]+)\s*\u2192\s*([^\n.!?]+)/i);
+  if (m?.[1] && m[2]) { patch.departure = titleCase(m[1].trim()); patch.arrival = titleCase(m[2].trim()); }
 
   // Departure
-  m = t.match(/Ville de d[e\u00e9]part\s*[:,]\s*([^\n.]+)/i);
-  if (m?.[1]) return { departure: titleCase(m[1].trim()) };
-
-  m = t.match(/Departure city\s*[:,]\s*([^\n.]+)/i);
-  if (m?.[1]) return { departure: titleCase(m[1].trim()) };
+  if (!patch.departure) {
+    m = t.match(/Ville de d[e\u00e9]part\s*[:,]\s*([^\n.!?]+)/i) ?? t.match(/Departure city\s*[:,]\s*([^\n.!?]+)/i);
+    if (m?.[1]) patch.departure = titleCase(m[1].trim());
+  }
 
   // Arrival
-  m = t.match(/Ville d['\u2019]arriv[e\u00e9]e\s*[:,]\s*([^\n.]+)/i);
-  if (m?.[1]) return { arrival: titleCase(m[1].trim()) };
+  if (!patch.arrival) {
+    m = t.match(/Ville d['\u2019]arriv[e\u00e9]e\s*[:,]\s*([^\n.!?]+)/i) ?? t.match(/Arrival city\s*[:,]\s*([^\n.!?]+)/i);
+    if (m?.[1]) patch.arrival = titleCase(m[1].trim());
+  }
 
-  m = t.match(/Arrival city\s*[:,]\s*([^\n.]+)/i);
-  if (m?.[1]) return { arrival: titleCase(m[1].trim()) };
-
-  // Date
-  m = t.match(/Date\/p[e\u00e9]riode?\s*[:,]\s*([^\n.]+)/i);
-  if (m?.[1]) return { date: m[1].trim() };
+  // Date — scan the whole turn, not just a single label line
+  m = t.match(/Date(?:\/p[e\u00e9]riode?)?\s*[:,]\s*([^\n.!?]+)/i)
+    ?? t.match(/p[e\u00e9]riode?\s*[:,]\s*([^\n.!?]+)/i);
+  if (m?.[1]) patch.date = m[1].trim();
 
   // Service
-  m = t.match(/Service choisi\s*[:,]\s*([^\n.]+)/i);
-  if (m?.[1]) { const opt = parseServiceLabel(m[1]); if (opt) return { service: opt }; }
+  m = t.match(/Service\s+(?:choisi|selected)\s*[:,]\s*([^\n.!?]+)/i);
+  if (m?.[1]) { const opt = parseServiceLabel(m[1]); if (opt) patch.service = opt; }
 
-  m = t.match(/Service selected\s*[:,]\s*([^\n.]+)/i);
-  if (m?.[1]) { const opt = parseServiceLabel(m[1]); if (opt) return { service: opt }; }
+  // Also catch service when Alex confirms it conversationally:
+  // "Parfait, j'ai bien noté le service Économique."
+  if (!patch.service) {
+    const opt = parseServiceLabel(t);
+    // Only accept if the turn is clearly a service confirmation, not incidental mention
+    if (opt && /(?:not[e\u00e9]|retenu|choisi|s[e\u00e9]lectionn[e\u00e9]|confirm[e\u00e9]|enregistr[e\u00e9]|noted|selected|chosen)/i.test(t)) {
+      patch.service = opt;
+    }
+  }
 
-  return null;
+  return Object.keys(patch).length ? patch : null;
 }
 
 function mergeRoute(prev: RouteInfo, patch: Partial<RouteInfo> | null): RouteInfo {
@@ -211,10 +218,15 @@ function extractClientName(entries: TranscriptEntry[]): string | null {
 }
 
 function extractEmail(entries: TranscriptEntry[]): string | null {
+  // Match a real @ address (typed/pasted into transcript)
   const emailRe = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/;
+  // Match spoken form: "john at gmail dot com" or "john arobase gmail point com"
+  const spokenRe = /([a-z0-9][a-z0-9._+\-]*)\s+(?:at|@|arobase|chez)\s+([a-z0-9][a-z0-9.\-]*)\s+(?:dot|point|\.|\.\s*)\s*([a-z]{2,})/i;
   for (const e of entries) {
-    const m = e.text.match(emailRe);
-    if (m) return m[0].toLowerCase();
+    const m1 = e.text.match(emailRe);
+    if (m1) return m1[0].toLowerCase();
+    const m2 = e.text.match(spokenRe);
+    if (m2) return `${m2[1]}@${m2[2]}.${m2[3]}`.toLowerCase();
   }
   return null;
 }
@@ -364,7 +376,7 @@ export function useVapiCall(): UseVapiCallResult {
         const res = await fetch("/api/route-updates");
         if (!res.ok) return;
         const patch = await res.json() as Partial<RouteInfo>;
-        if (!patch || (!patch.departure && !patch.arrival && !patch.date && !patch.service)) return;
+        if (!patch || Object.values(patch).every((v) => v === null || v === undefined)) return;
         setRouteInfo((prev) => {
           const next = mergeRoute(prev, patch);
           routeRef.current = next;

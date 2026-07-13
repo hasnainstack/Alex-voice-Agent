@@ -56,11 +56,11 @@ export async function POST(req: NextRequest) {
 
     storeRoute("latest", {
       clientName: args.clientName ?? null,
-      email: args.email ?? null,
-      departure: args.departure ?? null,
-      arrival: args.arrival ?? null,
-      date: args.date ?? null,
-      // service intentionally ignored
+      email:      args.email      ?? null,
+      departure:  args.departure  ?? null,
+      arrival:    args.arrival    ?? null,
+      date:       args.date       ?? null,
+      service:    args.service    ?? null,
     });
 
     return NextResponse.json(
@@ -81,10 +81,11 @@ export async function POST(req: NextRequest) {
   ) {
     storeRoute("latest", {
       clientName: flat.clientName ?? null,
-      email: flat.email ?? null,
-      departure: flat.departure ?? null,
-      arrival: flat.arrival ?? null,
-      date: flat.date ?? null,
+      email:      flat.email      ?? null,
+      departure:  flat.departure  ?? null,
+      arrival:    flat.arrival    ?? null,
+      date:       flat.date       ?? null,
+      service:    flat.service    ?? null,
     });
 
     return NextResponse.json(
