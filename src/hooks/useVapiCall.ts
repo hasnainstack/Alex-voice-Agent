@@ -285,15 +285,41 @@ function extractClientName(entries: TranscriptEntry[]): string | null {
 }
 
 function extractEmail(entries: TranscriptEntry[]): string | null {
-  // Match a real @ address (typed/pasted into transcript)
+  // 1. Real @ address already in transcript (copy-pasted or typed)
   const emailRe = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/;
-  // Match spoken form: "john at gmail dot com" or "john arobase gmail point com"
-  const spokenRe = /([a-z0-9][a-z0-9._+\-]*)\s+(?:at|@|arobase|chez)\s+([a-z0-9][a-z0-9.\-]*)\s+(?:dot|point|\.|\.\s*)\s*([a-z]{2,})/i;
+
+  // 2. Spoken form — Vapi transcribes these variations:
+  //    "john at gmail dot com"
+  //    "john arobase gmail point com"
+  //    "john at gmail.com"  (mixed)
+  //    "john@gmail dot com" (partial symbol)
+  const spokenRe = /([a-z0-9][a-z0-9._+\-]{0,40})\s+(?:at|@|arobase|chez)\s+([a-z0-9][a-z0-9.\-]{1,40})\s+(?:dot|point|\.)\s*([a-z]{2,6})/i;
+
+  // 3. Underscore spoken as "underscore" or "tiret bas"
+  //    "john underscore doe at gmail dot com"
+  const normaliseSpoken = (t: string) =>
+    t.replace(/\bunderscore\b/gi, "_")
+     .replace(/\btiret\s*bas\b/gi, "_")
+     .replace(/\btiret\b/gi, "-")
+     .replace(/\bpoint\b/gi, ".")
+     .replace(/\bdot\b/gi, ".")
+     .replace(/\barobase\b/gi, "@")
+     .replace(/\bchez\b/gi, "@");
+
+  // Scan all entries — email appears in user speech
   for (const e of entries) {
+    // Try raw @ match first
     const m1 = e.text.match(emailRe);
     if (m1) return m1[0].toLowerCase();
-    const m2 = e.text.match(spokenRe);
-    if (m2) return `${m2[1]}@${m2[2]}.${m2[3]}`.toLowerCase();
+
+    // Normalise spoken words then try @ match again
+    const normalised = normaliseSpoken(e.text);
+    const m2 = normalised.match(emailRe);
+    if (m2) return m2[0].toLowerCase();
+
+    // Try spoken pattern on original
+    const m3 = e.text.match(spokenRe);
+    if (m3) return `${m3[1]}@${m3[2]}.${m3[3]}`.toLowerCase().replace(/\s+/g, "");
   }
   return null;
 }
@@ -538,6 +564,12 @@ export function useVapiCall(): UseVapiCallResult {
           const nlp = extractRouteFromTranscript(next);
           console.log("[route]", { role: message.role, text: entry.text, nlp, assistantPatch, merged });
           merged = mergeRoute(merged, { departure: nlp.departure ?? undefined, arrival: nlp.arrival ?? undefined });
+        }
+
+        // Pick up email live as soon as the user says it
+        if (!merged.email) {
+          const email = extractEmail(next);
+          if (email) merged = { ...merged, email };
         }
 
         routeRef.current = merged;

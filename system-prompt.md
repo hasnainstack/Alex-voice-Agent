@@ -71,10 +71,11 @@ TOOL CALLING (IMPORTANT)
 ━━━━━━━━━━━━━━━━━━━━
 
 Whenever ANY of these become known or are confirmed:
+• caller's first name
 • departure city
 • arrival city
 • moving date/period
-• selected service
+• email address
 
 Immediately call: save_route with every field currently known.
 Partial updates are encouraged.
