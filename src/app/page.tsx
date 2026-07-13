@@ -46,10 +46,10 @@ export default function HomePage() {
           </p>
         </div>
 
-        {/* Mobile companies sheet */}
-        <div className="mb-4">
+        {/* Mobile companies sheet — hidden */}
+        {/* <div className="mb-4">
           <CompaniesBottomSheet status={status} routeInfo={routeInfo} />
-        </div>
+        </div> */}
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Left column: route + controls */}
@@ -70,15 +70,15 @@ export default function HomePage() {
           </div>
 
           {/* Center: transcript + post-call summary */}
-          <div className="lg:col-span-6 flex flex-col gap-6">
+          <div className="lg:col-span-9 flex flex-col gap-6">
             <TranscriptLog entries={transcript} isEmpty={transcript.length === 0} />
             {callSummary && <CallSummaryCard summary={callSummary} />}
           </div>
 
-          {/* Right: companies sidebar (desktop only) */}
-          <div className="lg:col-span-3">
+          {/* Right: companies sidebar — hidden */}
+          {/* <div className="lg:col-span-3">
             <CompaniesSidebar status={status} routeInfo={routeInfo} />
-          </div>
+          </div> */}
         </div>
       </main>
 
