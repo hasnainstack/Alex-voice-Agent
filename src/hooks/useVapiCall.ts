@@ -130,6 +130,7 @@ function extractRouteFromAssistantLine(text: string): Partial<RouteInfo> | null 
   const t = text.trim();
   const patch: Partial<RouteInfo> = {};
 
+  // ── Structured labels (system-prompt format) ──────────────────────────────
   // Trajet/Route confirmed — captures both cities in one shot
   let m = t.match(/Trajet confirm[e\u00e9]\s*[:,]\s*([^\u2192\n]+)\s*\u2192\s*([^\n.!?]+)/i);
   if (m?.[1] && m[2]) { patch.departure = titleCase(m[1].trim()); patch.arrival = titleCase(m[2].trim()); }
@@ -137,16 +138,40 @@ function extractRouteFromAssistantLine(text: string): Partial<RouteInfo> | null 
   m = t.match(/Route confirmed\s*[:,]\s*([^\u2192\n]+)\s*\u2192\s*([^\n.!?]+)/i);
   if (m?.[1] && m[2]) { patch.departure = titleCase(m[1].trim()); patch.arrival = titleCase(m[2].trim()); }
 
-  // Departure
   if (!patch.departure) {
     m = t.match(/Ville de d[e\u00e9]part\s*[:,]\s*([^\n.!?]+)/i) ?? t.match(/Departure city\s*[:,]\s*([^\n.!?]+)/i);
     if (m?.[1]) patch.departure = titleCase(m[1].trim());
   }
 
-  // Arrival
   if (!patch.arrival) {
     m = t.match(/Ville d['\u2019]arriv[e\u00e9]e\s*[:,]\s*([^\n.!?]+)/i) ?? t.match(/Arrival city\s*[:,]\s*([^\n.!?]+)/i);
     if (m?.[1]) patch.arrival = titleCase(m[1].trim());
+  }
+
+  // ── Conversational confirmations (Alex echoes back the corrected city) ────
+  // These fire even when no structured label is present, so mispronounced
+  // cities captured by NLP from user speech get overwritten with Alex's
+  // corrected version. e.g. user says "Leon", Alex says "Vous partez de Lyon"
+  if (!patch.departure) {
+    const depConv = [
+      new RegExp(`(?:vous\\s+partez|vous\\s+d[e\u00e9]m[e\u00e9]nagez|vous\\s+quittez|au\\s+d[e\u00e9]part\\s+de|donc\\s+depuis)\\s+(?:de\\s+)?${CITY2_RE}`, "i"),
+      new RegExp(`(?:you(?:'re|\\s+are)\\s+(?:moving|leaving)\\s+from)\\s+${CITY2_RE}`, "i"),
+    ];
+    for (const re of depConv) {
+      const mc = t.match(re);
+      if (mc?.[1]) { const c = cleanCapture(mc[1]); if (c.length >= 3 && !STOP_WORDS.has(c.toLowerCase())) { patch.departure = titleCase(c); break; } }
+    }
+  }
+
+  if (!patch.arrival) {
+    const arrConv = [
+      new RegExp(`(?:vous\\s+allez|vous\\s+emm[e\u00e9]nagez|vous\\s+installez|\u00e0\\s+destination\\s+de)\\s+(?:\u00e0\\s+|en\\s+)?${CITY2_RE}`, "i"),
+      new RegExp(`(?:you(?:'re|\\s+are)\\s+(?:moving|heading|going)\\s+to)\\s+${CITY2_RE}`, "i"),
+    ];
+    for (const re of arrConv) {
+      const mc = t.match(re);
+      if (mc?.[1]) { const c = cleanCapture(mc[1]); if (c.length >= 3 && !STOP_WORDS.has(c.toLowerCase())) { patch.arrival = titleCase(c); break; } }
+    }
   }
 
   // Date — explicit label from system prompt
@@ -221,6 +246,21 @@ function mergeRoute(prev: RouteInfo, patch: Partial<RouteInfo> | null): RouteInf
     phone:       patch.phone       ?? prev.phone,
     housingType: patch.housingType ?? prev.housingType,
     leadStatus:  patch.leadStatus  ?? prev.leadStatus,
+  };
+}
+
+// Webhook / assistant patches are authoritative — non-null values always
+// override whatever NLP previously captured (corrects mispronunciations).
+function mergeRouteForce(prev: RouteInfo, patch: Partial<RouteInfo>): RouteInfo {
+  return {
+    departure:   patch.departure   != null ? patch.departure   : prev.departure,
+    arrival:     patch.arrival     != null ? patch.arrival     : prev.arrival,
+    date:        patch.date        != null ? patch.date        : prev.date,
+    clientName:  patch.clientName  != null ? patch.clientName  : prev.clientName,
+    email:       patch.email       != null ? patch.email       : prev.email,
+    phone:       patch.phone       != null ? patch.phone       : prev.phone,
+    housingType: patch.housingType != null ? patch.housingType : prev.housingType,
+    leadStatus:  patch.leadStatus  != null ? patch.leadStatus  : prev.leadStatus,
   };
 }
 
@@ -382,7 +422,7 @@ export function useVapiCall(): UseVapiCallResult {
         const vals = Object.values(patch);
         if (vals.every((v) => v === null || v === undefined || (Array.isArray(v) && v.length === 0))) return;
         setRouteInfo((prev) => {
-          const next = mergeRoute(prev, patch);
+          const next = mergeRouteForce(prev, patch);
           routeRef.current = next;
           return next;
         });
@@ -489,8 +529,11 @@ export function useVapiCall(): UseVapiCallResult {
         const assistantPatch =
           message.role === "assistant" ? extractRouteFromAssistantLine(entry.text) : null;
 
-        // NLP fallback: fill any cities not yet known
-        let merged = mergeRoute(routeRef.current, assistantPatch);
+        // Assistant patches are authoritative (corrected city names override NLP).
+        // NLP only fills slots still empty after the assistant patch.
+        let merged = assistantPatch
+          ? mergeRouteForce(routeRef.current, assistantPatch)
+          : routeRef.current;
         if (!merged.departure || !merged.arrival) {
           const nlp = extractRouteFromTranscript(next);
           console.log("[route]", { role: message.role, text: entry.text, nlp, assistantPatch, merged });
