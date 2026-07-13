@@ -296,18 +296,23 @@ function extractEmail(entries: TranscriptEntry[]): string | null {
      .replace(/\barobase\b/gi, "@")
      .replace(/\bchez\b/gi, "@");
 
-  // join across entries so a split like "jack123" | "at gmail dot com"
-  // is matched as one continuous phrase, not two dead ends
-  const joined = entries.filter(e => e.speaker === "user").map(e => e.text).join(" ");
+  // check assistant's (usually cleaner, confirmed) echo first,
+  // then fall back to raw user speech — same priority as extractDate
+  const assistantJoined = entries.filter(e => e.speaker === "assistant").map(e => e.text).join(" ");
+  const userJoined      = entries.filter(e => e.speaker === "user").map(e => e.text).join(" ");
 
-  const m1 = joined.match(emailRe);
-  if (m1) return m1[0].toLowerCase();
+  for (const text of [assistantJoined, userJoined]) {
+    if (!text) continue;
 
-  const m2 = normaliseSpoken(joined).match(emailRe);
-  if (m2) return m2[0].toLowerCase();
+    const m1 = text.match(emailRe);
+    if (m1) return m1[0].toLowerCase();
 
-  const m3 = joined.match(spokenRe);
-  if (m3) return `${m3[1]}@${m3[2]}.${m3[3]}`.toLowerCase().replace(/\s+/g, "");
+    const m2 = normaliseSpoken(text).match(emailRe);
+    if (m2) return m2[0].toLowerCase();
+
+    const m3 = text.match(spokenRe);
+    if (m3) return `${m3[1]}@${m3[2]}.${m3[3]}`.toLowerCase().replace(/\s+/g, "");
+  }
 
   return null;
 }
