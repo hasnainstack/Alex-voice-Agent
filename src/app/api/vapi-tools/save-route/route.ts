@@ -54,13 +54,14 @@ export async function POST(req: NextRequest) {
 
     const args = safeJsonParse<Partial<RouteInfo>>(toolCall?.function?.arguments) ?? {};
 
-    storeRoute("latest", {
-      clientName: args.clientName ?? null,
-      email:      args.email      ?? null,
-      departure:  args.departure  ?? null,
-      arrival:    args.arrival    ?? null,
-      date:       args.date       ?? null,
-    });
+    const patch: Partial<RouteInfo> = {};
+    if (args.clientName) patch.clientName = args.clientName;
+    if (args.email)      patch.email      = args.email;
+    if (args.departure)  patch.departure  = args.departure;
+    if (args.arrival)    patch.arrival    = args.arrival;
+    if (args.date)       patch.date       = args.date;
+
+    storeRoute("latest", patch);
 
     return NextResponse.json(
       { results: [{ toolCallId: toolCall.id, result: "ok" }] },
@@ -78,13 +79,14 @@ export async function POST(req: NextRequest) {
       typeof flat.arrival === "string" ||
       typeof flat.date === "string")
   ) {
-    storeRoute("latest", {
-      clientName: flat.clientName ?? null,
-      email:      flat.email      ?? null,
-      departure:  flat.departure  ?? null,
-      arrival:    flat.arrival    ?? null,
-      date:       flat.date       ?? null,
-    });
+    const patch: Partial<RouteInfo> = {};
+    if (flat.clientName) patch.clientName = flat.clientName;
+    if (flat.email)      patch.email      = flat.email;
+    if (flat.departure)  patch.departure  = flat.departure;
+    if (flat.arrival)    patch.arrival    = flat.arrival;
+    if (flat.date)       patch.date       = flat.date;
+
+    storeRoute("latest", patch);
 
     return NextResponse.json(
       { results: [{ toolCallId: "test", result: "ok" }] },
