@@ -18,13 +18,23 @@ export async function OPTIONS() {
 }
 
 function verifyBearer(authHeader: string | null): boolean {
-  if (!WEBHOOK_SECRET) return true;
+  if (!WEBHOOK_SECRET) return true; // allow if not set
   if (!authHeader) return false;
+
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+
+  // timingSafeEqual throws if buffer lengths differ
+  if (token.length !== WEBHOOK_SECRET.length) return false;
+
+  return crypto.timingSafeEqual(Buffer.from(token), Buffer.from(WEBHOOK_SECRET));
+}
+
+function safeJsonParse<T = any>(value: unknown): T | null {
+  if (typeof value !== "string") return value as T;
   try {
-    return crypto.timingSafeEqual(Buffer.from(token), Buffer.from(WEBHOOK_SECRET));
+    return JSON.parse(value) as T;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -33,52 +43,55 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: CORS_HEADERS });
   }
 
-  const payload = await req.json() as {
-    message?: {
-      call?: { id?: string };
-      toolCallList?: Array<{ id: string; function?: { name: string; arguments: unknown } }>;
-    };
-  } & Partial<RouteInfo>;
+  const payload = await req.json();
 
-  const toolCall = payload.message?.toolCallList?.[0];
-
-  // Real Vapi call-time webhook: wrapped in message.toolCallList[0].
+  // Vapi tool-calls webhook shape
+  const toolCall = payload?.message?.toolCallList?.[0];
   if (toolCall) {
-    if (toolCall.function?.name !== "save_route") {
+    if (toolCall?.function?.name !== "save_route") {
       return NextResponse.json({ error: "Unexpected tool call" }, { status: 400, headers: CORS_HEADERS });
     }
 
-    const rawArgs = toolCall.function.arguments;
-    const args = (typeof rawArgs === "string" ? JSON.parse(rawArgs) : rawArgs) as Partial<RouteInfo>;
+    const args = safeJsonParse<Partial<RouteInfo>>(toolCall?.function?.arguments) ?? {};
 
     storeRoute("latest", {
+      clientName: args.clientName ?? null,
+      email: args.email ?? null,
       departure: args.departure ?? null,
-      arrival:   args.arrival   ?? null,
-      date:      args.date      ?? null,
-      service:   args.service   ?? null,
+      arrival: args.arrival ?? null,
+      date: args.date ?? null,
+      // service intentionally ignored
     });
 
     return NextResponse.json(
-      { results: [{ toolCallId: toolCall.id, result: `Saved: ${JSON.stringify(args)}` }] },
+      { results: [{ toolCallId: toolCall.id, result: "ok" }] },
       { headers: CORS_HEADERS }
     );
   }
 
-  // Fallback: dashboard "Test Tool" sends the arguments as a flat body,
-  // with no message.toolCallList envelope. Accept that shape too.
-  if ("departure" in payload || "arrival" in payload || "date" in payload || "service" in payload) {
+  // Dashboard "Test Tool" fallback (flat JSON body)
+  const flat = payload as Partial<RouteInfo>;
+  if (
+    flat &&
+    (typeof flat.clientName === "string" ||
+      typeof flat.email === "string" ||
+      typeof flat.departure === "string" ||
+      typeof flat.arrival === "string" ||
+      typeof flat.date === "string")
+  ) {
     storeRoute("latest", {
-      departure: payload.departure ?? null,
-      arrival:   payload.arrival   ?? null,
-      date:      payload.date      ?? null,
-      service:   payload.service   ?? null,
+      clientName: flat.clientName ?? null,
+      email: flat.email ?? null,
+      departure: flat.departure ?? null,
+      arrival: flat.arrival ?? null,
+      date: flat.date ?? null,
     });
 
     return NextResponse.json(
-      { results: [{ toolCallId: "test", result: `Saved: ${JSON.stringify(payload)}` }] },
+      { results: [{ toolCallId: "test", result: "ok" }] },
       { headers: CORS_HEADERS }
     );
   }
 
-  return NextResponse.json({ error: "Unexpected tool call" }, { status: 400, headers: CORS_HEADERS });
+  return NextResponse.json({ error: "Unexpected payload" }, { status: 400, headers: CORS_HEADERS });
 }

@@ -22,12 +22,6 @@ const SERVICE_LABELS: Record<string, string> = {
   storage: "Garde-meubles",
 };
 
-const LEAD_LABELS: Record<string, { label: string; color: string }> = {
-  qualified:      { label: "Qualifié ✓",        color: "text-confirmed" },
-  needs_followup: { label: "Suivi nécessaire",   color: "text-beacon" },
-  not_interested: { label: "Non intéressé",      color: "text-ink400" },
-};
-
 const BLANK = "—";
 
 interface RowProps { label: string; value: string | null | undefined; highlight?: boolean }
@@ -47,11 +41,7 @@ function Row({ label, value, highlight }: RowProps) {
 export function CallSummaryCard({ summary }: { summary: CallSummary }) {
   const [transcriptOpen, setTranscriptOpen] = useState(false);
 
-  const leadMeta = summary.leadStatus ? LEAD_LABELS[summary.leadStatus] : null;
   const serviceLabel = summary.service ? SERVICE_LABELS[summary.service] : null;
-  const servicesDisplay = summary.requestedServices.length
-    ? summary.requestedServices.join(", ")
-    : null;
 
   return (
     <div className="rounded-2xl border border-confirmed/30 bg-white shadow-sm overflow-hidden animate-rise">
@@ -68,26 +58,14 @@ export function CallSummaryCard({ summary }: { summary: CallSummary }) {
         </span>
       </div>
 
-      {/* ── Lead status badge ── */}
-      {leadMeta && (
-        <div className="px-5 pt-4 pb-0">
-          <span className={`font-mono text-[10px] tracking-[0.14em] font-semibold ${leadMeta.color}`}>
-            STATUT — {leadMeta.label}
-          </span>
-        </div>
-      )}
-
-      {/* ── Structured data grid ── */}
+{/* ── Structured data grid ── */}
       <div className="px-5 py-4">
-        <Row label="NOM"              value={summary.clientName} highlight />
-        <Row label="EMAIL"            value={summary.email} />
-        <Row label="TÉLÉPHONE"        value={summary.phone} />
-        <Row label="DÉPART"           value={summary.departure} highlight />
-        <Row label="ARRIVÉE"          value={summary.arrival} highlight />
-        <Row label="DATE SOUHAITÉE"   value={summary.date} />
-        <Row label="SERVICE"          value={serviceLabel} />
-        <Row label="LOGEMENT"         value={summary.housingType} />
-        <Row label="SERVICES DEMANDÉS" value={servicesDisplay} />
+        <Row label="NOM"            value={summary.clientName} highlight />
+        <Row label="DÉPART"         value={summary.departure} highlight />
+        <Row label="ARRIVÉE"        value={summary.arrival} highlight />
+        <Row label="DATE SOUHAITÉE" value={summary.date} />
+        <Row label="EMAIL"          value={summary.email} />
+        <Row label="SERVICE"        value={serviceLabel} />
       </div>
 
       {/* ── Transcript toggle ── */}
@@ -126,12 +104,6 @@ export function CallSummaryCard({ summary }: { summary: CallSummary }) {
         )}
       </div>
 
-      {/* ── Footer note ── */}
-      <div className="px-5 py-3 bg-paper border-t border-line">
-        <p className="text-[11px] text-ink400 leading-relaxed">
-          Un conseiller NEXTCITYS vous contactera sous 48h avec jusqu&apos;à 6 devis comparatifs.
-        </p>
-      </div>
     </div>
   );
 }
