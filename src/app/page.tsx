@@ -3,7 +3,7 @@
 import { DispatchHeader } from "@/components/DispatchHeader";
 import { RouteVisualizer } from "@/components/RouteVisualizer";
 import { CallControls } from "@/components/CallControls";
-import { TranscriptLog } from "@/components/TranscriptLog";
+import { AudioVisualizer } from "@/components/AudioVisualizer";
 import { ConnectingOverlay } from "@/components/ConnectingOverlay";
 import { CompaniesSidebar, CompaniesBottomSheet } from "@/components/CompaniesPanel";
 import { CallSummaryCard } from "@/components/CallSummaryCard";
@@ -69,9 +69,13 @@ export default function HomePage() {
             />
           </div>
 
-          {/* Center: transcript + post-call summary */}
+          {/* Center: audio visualizer + post-call summary */}
           <div className="lg:col-span-9 flex flex-col gap-6">
-            <TranscriptLog entries={transcript} isEmpty={transcript.length === 0} />
+            <AudioVisualizer
+              status={status}
+              volumeLevel={volumeLevel}
+              isAssistantSpeaking={isAssistantSpeaking}
+            />
             {callSummary && <CallSummaryCard summary={callSummary} />}
           </div>
 

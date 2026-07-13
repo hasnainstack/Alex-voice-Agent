@@ -37,11 +37,41 @@ const config: Config = {
           "0%": { opacity: "0", transform: "translateY(6px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
+        ringPulse: {
+          "0%":   { transform: "scale(1)",    opacity: "0.5" },
+          "100%": { transform: "scale(1.55)", opacity: "0" },
+        },
+        bar1: {
+          "0%,100%": { height: "6px"  },
+          "50%":     { height: "22px" },
+        },
+        bar2: {
+          "0%,100%": { height: "14px" },
+          "50%":     { height: "36px" },
+        },
+        bar3: {
+          "0%,100%": { height: "22px" },
+          "50%":     { height: "10px" },
+        },
+        bar4: {
+          "0%,100%": { height: "10px" },
+          "50%":     { height: "30px" },
+        },
+        bar5: {
+          "0%,100%": { height: "18px" },
+          "50%":     { height: "6px"  },
+        },
       },
       animation: {
-        travel: "travel 2.6s ease-in-out infinite alternate",
+        travel:      "travel 2.6s ease-in-out infinite alternate",
         beaconPulse: "beaconPulse 1.8s ease-out infinite",
-        rise: "rise 0.35s ease-out both",
+        rise:        "rise 0.35s ease-out both",
+        ringPulse:   "ringPulse 2s ease-out infinite",
+        bar1:        "bar1 1.1s ease-in-out infinite",
+        bar2:        "bar2 0.9s ease-in-out infinite",
+        bar3:        "bar3 1.3s ease-in-out infinite",
+        bar4:        "bar4 0.8s ease-in-out infinite",
+        bar5:        "bar5 1.0s ease-in-out infinite",
       },
     },
   },
