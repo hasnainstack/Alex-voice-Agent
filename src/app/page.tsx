@@ -53,13 +53,21 @@ export default function HomePage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Left column: route + controls */}
-          <div className="lg:col-span-3 flex flex-col gap-6">
+          <div className="lg:col-span-4 flex flex-col gap-4">
             <RouteVisualizer
               status={status}
               isAssistantSpeaking={isAssistantSpeaking}
               volumeLevel={volumeLevel}
               routeInfo={routeInfo}
             />
+            {/* Connector arrow — desktop only */}
+            <div className="hidden lg:flex items-center gap-2 px-1">
+              <div className="flex-1 h-px bg-gradient-to-r from-transparent via-line to-transparent" />
+              <svg className="w-3 h-3 text-ink400 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+              <div className="flex-1 h-px bg-gradient-to-r from-transparent via-line to-transparent" />
+            </div>
             <CallControls
               status={status}
               micStatus={micStatus}
@@ -69,8 +77,8 @@ export default function HomePage() {
             />
           </div>
 
-          {/* Center: audio visualizer + post-call summary */}
-          <div className="lg:col-span-9 flex flex-col gap-6">
+          {/* Right: audio visualizer + post-call summary */}
+          <div className="lg:col-span-8 flex flex-col gap-6">
             <AudioVisualizer
               status={status}
               volumeLevel={volumeLevel}

@@ -17,38 +17,40 @@ function formatDuration(totalSeconds: number): string {
   return `${m}:${s}`;
 }
 
-export function CallControls({
-  status, micStatus, durationSeconds, onStart, onEnd,
-}: CallControlsProps) {
-  const isActive = status === "active" || status === "connecting";
-  const denied   = micStatus === "denied" || micStatus === "unavailable";
+export function CallControls({ status, micStatus, durationSeconds, onStart, onEnd }: CallControlsProps) {
+  const isActive  = status === "active" || status === "connecting";
+  const isEnded   = status === "ended";
+  const denied    = micStatus === "denied" || micStatus === "unavailable";
+  const showTimer = status === "active" || status === "ended";
 
   return (
     <div className="flex flex-col gap-2 rounded-2xl bg-paperCard border border-line p-4 sm:p-5">
-      <div className="flex items-center gap-4">
-        {!isActive ? (
-          <button
-            onClick={onStart}
-            disabled={denied}
-            className="flex-1 rounded-xl bg-ink px-5 py-3.5 font-body text-sm font-semibold text-paper transition hover:bg-surface disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            Démarrer l&rsquo;appel de démonstration
-          </button>
-        ) : (
-          <button
-            onClick={onEnd}
-            className="flex-1 rounded-xl bg-red-50 px-5 py-3.5 font-body text-sm font-semibold text-red-600 transition hover:bg-red-100"
-          >
-            Terminer l&rsquo;appel
-          </button>
-        )}
-
-        <div className="font-mono text-sm text-ink600 tabular-nums w-14 text-right">
-          {status === "active" || status === "ended"
-            ? formatDuration(durationSeconds)
-            : "00:00"}
-        </div>
-      </div>
+      {!isActive ? (
+        <button
+          onClick={onStart}
+          disabled={denied}
+          className="relative w-full rounded-xl bg-ink px-5 py-3.5 font-body text-sm font-semibold text-paper transition hover:bg-surface disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+        >
+          <span>{isEnded ? "Relancer l\u2019appel" : "Démarrer l\u2019appel de démonstration"}</span>
+          {showTimer && (
+            <span className="font-mono text-xs tabular-nums bg-white/10 px-2 py-0.5 rounded-md">
+              {formatDuration(durationSeconds)}
+            </span>
+          )}
+        </button>
+      ) : (
+        <button
+          onClick={onEnd}
+          className="relative w-full rounded-xl bg-red-50 px-5 py-3.5 font-body text-sm font-semibold text-red-600 transition hover:bg-red-100 flex items-center justify-center gap-3"
+        >
+          <span>Terminer l&rsquo;appel</span>
+          {status === "active" && (
+            <span className="font-mono text-xs tabular-nums bg-red-100 text-red-500 px-2 py-0.5 rounded-md">
+              {formatDuration(durationSeconds)}
+            </span>
+          )}
+        </button>
+      )}
 
       {denied && (
         <div className="flex items-start gap-2 rounded-xl bg-red-50 border border-red-100 px-3 py-2.5">
