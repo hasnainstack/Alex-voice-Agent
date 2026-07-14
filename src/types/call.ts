@@ -6,7 +6,7 @@ export type CallStatus = "idle" | "connecting" | "active" | "ended" | "error";
 
 export type LeadStatus = "qualified" | "needs_followup" | "not_interested" | null;
 
-export type ServiceTier = "economy" | "standard" | "comfort" | "storage";
+// export type ServiceTier = "economy" | "standard" | "comfort" | "storage";
 
 export interface RouteInfo {
   departure: string | null;
