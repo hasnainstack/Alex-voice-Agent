@@ -44,9 +44,26 @@ export async function POST(req: NextRequest) {
   }
 
   const payload = await req.json();
+  const msg = payload?.message;
+
+  // NEW: end-of-call-report — final, authoritative snapshot
+  if (msg?.type === "end-of-call-report") {
+    const structured = msg?.analysis?.structuredData ?? msg?.artifact?.variableValues ?? msg?.toolCalls?.[0]?.function?.arguments ?? {};
+
+    const patch: Partial<RouteInfo> = {};
+    if (structured.name) patch.name = structured.name;
+    if (structured.email)      patch.email      = structured.email;
+    if (structured.departure)  patch.departure  = structured.departure;
+    if (structured.arrival)    patch.arrival    = structured.arrival;
+    if (structured.date)       patch.date       = structured.date;
+    // if (structured.service)    patch.service    = structured.service;
+
+    storeRoute("latest", patch);
+    return NextResponse.json({ received: true }, { headers: CORS_HEADERS });
+  }
 
   // Vapi tool-calls webhook shape
-  const toolCall = payload?.message?.toolCallList?.[0];
+  const toolCall = msg?.toolCallList?.[0];
   if (toolCall) {
     if (toolCall?.function?.name !== "save_route") {
       return NextResponse.json({ error: "Unexpected tool call" }, { status: 400, headers: CORS_HEADERS });
@@ -55,11 +72,12 @@ export async function POST(req: NextRequest) {
     const args = safeJsonParse<Partial<RouteInfo>>(toolCall?.function?.arguments) ?? {};
 
     const patch: Partial<RouteInfo> = {};
-    if (args.clientName) patch.clientName = args.clientName;
+    if (args.name) patch.name = args.name;
     if (args.email)      patch.email      = args.email;
     if (args.departure)  patch.departure  = args.departure;
     if (args.arrival)    patch.arrival    = args.arrival;
     if (args.date)       patch.date       = args.date;
+    // if (args.service)    patch.service    = args.service;
 
     storeRoute("latest", patch);
 
@@ -71,20 +89,23 @@ export async function POST(req: NextRequest) {
 
   // Dashboard "Test Tool" fallback (flat JSON body)
   const flat = payload as Partial<RouteInfo>;
-  if (
+    if (
     flat &&
-    (typeof flat.clientName === "string" ||
+    (typeof flat.name === "string" ||
       typeof flat.email === "string" ||
       typeof flat.departure === "string" ||
       typeof flat.arrival === "string" ||
-      typeof flat.date === "string")
+      typeof flat.date === "string"
+      // typeof flat.service === "string"
+      )
   ) {
     const patch: Partial<RouteInfo> = {};
-    if (flat.clientName) patch.clientName = flat.clientName;
+    if (flat.name) patch.name = flat.name;
     if (flat.email)      patch.email      = flat.email;
     if (flat.departure)  patch.departure  = flat.departure;
     if (flat.arrival)    patch.arrival    = flat.arrival;
     if (flat.date)       patch.date       = flat.date;
+    // if (flat.service)    patch.service    = flat.service;
 
     storeRoute("latest", patch);
 

@@ -240,9 +240,10 @@ function mergeRoute(prev: RouteInfo, patch: Partial<RouteInfo> | null): RouteInf
     departure:   patch.departure   ?? prev.departure,
     arrival:     patch.arrival     ?? prev.arrival,
     date:        patch.date        ?? prev.date,
-    clientName:  patch.clientName  ?? prev.clientName,
+    name:        patch.name        ?? prev.name,
     email:       patch.email       ?? prev.email,
     phone:       patch.phone       ?? prev.phone,
+    // service:     patch.service     ?? prev.service,
     housingType: patch.housingType ?? prev.housingType,
     leadStatus:  patch.leadStatus  ?? prev.leadStatus,
   };
@@ -255,7 +256,7 @@ function mergeRouteForce(prev: RouteInfo, patch: Partial<RouteInfo>): RouteInfo 
     departure:   patch.departure   != null ? patch.departure   : prev.departure,
     arrival:     patch.arrival     != null ? patch.arrival     : prev.arrival,
     date:        patch.date        != null ? patch.date        : prev.date,
-    clientName:  patch.clientName  != null ? patch.clientName  : prev.clientName,
+    name:        patch.name        != null ? patch.name        : prev.name,
     email:       patch.email       != null ? patch.email       : prev.email,
     phone:       patch.phone       != null ? patch.phone       : prev.phone,
     housingType: patch.housingType != null ? patch.housingType : prev.housingType,
@@ -374,7 +375,7 @@ function extractRouteFromTranscript(entries: TranscriptEntry[]): RouteInfo {
     if (departure && arrival) break;
   }
 
-  return { departure, arrival: arrival ?? arrivalLow, date: null, clientName: null, email: null, phone: null, housingType: null, leadStatus: null };
+  return { departure, arrival: arrival ?? arrivalLow, date: null, name: null, email: null, phone: null, housingType: null, leadStatus: null };
 }
 
 // ---------------------------------------------------------------------------
@@ -407,13 +408,13 @@ export function useVapiCall(): UseVapiCallResult {
   const [isAssistantSpeaking, setIsAssistantSpeaking] = useState(false);
   const [errorMessage, setErrorMessage]   = useState<string | null>(null);
   const [durationSeconds, setDurationSeconds] = useState(0);
-  const [routeInfo, setRouteInfo] = useState<RouteInfo>({ departure: null, arrival: null, date: null, clientName: null, email: null, phone: null, housingType: null, leadStatus: null });
+  const [routeInfo, setRouteInfo] = useState<RouteInfo>({ departure: null, arrival: null, date: null, name: null, email: null, phone: null, housingType: null, leadStatus: null });
   const [callSummary, setCallSummary]     = useState<CallSummary | null>(null);
 
   const durationInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const entryCounter     = useRef(0);
   const transcriptRef    = useRef<TranscriptEntry[]>([]);
-  const routeRef = useRef<RouteInfo>({ departure: null, arrival: null, date: null, clientName: null, email: null, phone: null, housingType: null, leadStatus: null });
+  const routeRef = useRef<RouteInfo>({ departure: null, arrival: null, date: null, name: null, email: null, phone: null, housingType: null, leadStatus: null });
   const durationRef      = useRef(0);
 
   const nextId = useCallback(() => {
@@ -457,43 +458,74 @@ export function useVapiCall(): UseVapiCallResult {
         setErrorMessage(null);
         setTranscript([]);
         setDurationSeconds(0);
-        setRouteInfo({ departure: null, arrival: null, date: null, clientName: null, email: null, phone: null, housingType: null, leadStatus: null });
+        setRouteInfo({ departure: null, arrival: null, date: null, name: null, email: null, phone: null,  housingType: null, leadStatus: null });
         setCallSummary(null);
         transcriptRef.current = [];
-        routeRef.current = { departure: null, arrival: null, date: null, clientName: null, email: null, phone: null, housingType: null, leadStatus: null };
+        routeRef.current = { departure: null, arrival: null, date: null, name: null, email: null, phone: null, housingType: null, leadStatus: null };
         durationRef.current = 0;
         durationInterval.current = setInterval(() => {
           setDurationSeconds((d) => { const n = d + 1; durationRef.current = n; return n; });
         }, 1000);
       };
 
-      const handleCallEnd = () => {
-        setStatus("ended");
-        setIsAssistantSpeaking(false);
-        setVolumeLevel(0);
-        if (durationInterval.current) { clearInterval(durationInterval.current); durationInterval.current = null; }
-        const finalRoute = extractRouteFromTranscript(transcriptRef.current);
-        const merged = mergeRoute(routeRef.current, finalRoute);
-        // Enrich with transcript-extracted fields
-        const allEntries = transcriptRef.current;
-        const enriched: RouteInfo = {
-          ...merged,
-          date:        merged.date        ?? extractDate(allEntries),
-          clientName:  merged.clientName  ?? extractClientName(allEntries),
-          email:       merged.email       ?? extractEmail(allEntries),
-          // phone:       merged.phone       ?? extractPhone(allEntries),
-          housingType: merged.housingType ?? extractHousingType(allEntries),
-          leadStatus:  inferLeadStatus(allEntries, durationRef.current),
-        };
+      const handleCallEnd = async () => {
+  setStatus("ended");
+  setIsAssistantSpeaking(false);
+  setVolumeLevel(0);
+  if (durationInterval.current) { clearInterval(durationInterval.current); durationInterval.current = null; }
+
+  // Vapi's "end-of-call-report" webhook — which usually carries the most
+  // reliable structured data (email included) from post-call analysis —
+  // typically lands a few seconds AFTER the call-end event fires on the
+  // client, not before it. A single one-shot fetch here races that webhook
+  // and frequently loses, silently dropping fields like email even though
+  // the store gets the correct value moments later with nobody listening.
+  // Keep polling for a short window instead of asking once, backing off
+  // early only once every field we care about has actually been filled.
+  const isComplete = (r: Partial<RouteInfo>) =>
+    Boolean(r.departure && r.arrival && r.email && r.name && r.date);
+
+  const pollDelaysMs = [800, 1200, 1500, 1500, 2000]; // ~7s total window
+  for (const delay of pollDelaysMs) {
+    if (isComplete(routeRef.current)) break;
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    try {
+      const res = await fetch("/api/route-updates");
+      if (res.ok) {
+        const patch = await res.json() as Partial<RouteInfo> | null;
+        if (patch && typeof patch === "object") {
+          const vals = Object.values(patch);
+          if (!vals.every((v) => v === null || v === undefined)) {
+            routeRef.current = mergeRouteForce(routeRef.current, patch);
+          }
+        }
+      }
+    } catch { /* network hiccup — try again next delay */ }
+  }
+
+  const finalRoute = extractRouteFromTranscript(transcriptRef.current);
+  const merged = mergeRoute(routeRef.current, finalRoute);
+  const allEntries = transcriptRef.current;
+  const emailFromStore = merged.email;
+  const emailFromTranscript = emailFromStore ? null : extractEmail(allEntries);
+  const enriched: RouteInfo = {
+    ...merged,
+    date:        merged.date        ?? extractDate(allEntries),
+    name:        merged.name        ?? extractClientName(allEntries),
+    email:       emailFromStore ?? emailFromTranscript,
+    housingType: merged.housingType ?? extractHousingType(allEntries),
+    leadStatus:  merged.leadStatus  ?? inferLeadStatus(allEntries, durationRef.current),
+  };
         setRouteInfo(enriched);
         setCallSummary({
           duration:    durationRef.current,
           departure:   enriched.departure,
           arrival:     enriched.arrival,
           date:        enriched.date,
-          clientName:  enriched.clientName,
+          name:        enriched.name,
           email:       enriched.email,
           phone:       enriched.phone,
+          // service:     enriched.service,
           housingType: enriched.housingType,
           leadStatus:  enriched.leadStatus,
           transcript:  [...transcriptRef.current],

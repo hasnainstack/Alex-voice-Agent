@@ -67,7 +67,7 @@ export function CallSummaryCard({ summary }: { summary: CallSummary }) {
 
       {/* ── Structured data grid ── */}
       <div className="px-5 py-4">
-        <Row label="NOM"            value={summary.clientName} highlight />
+        <Row label="NOM"            value={summary.name} highlight />
         <Row label="DÉPART"         value={summary.departure} highlight />
         <Row label="ARRIVÉE"        value={summary.arrival} highlight />
         <Row label="DATE SOUHAITÉE" value={summary.date} />

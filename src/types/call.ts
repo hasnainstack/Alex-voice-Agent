@@ -6,14 +6,17 @@ export type CallStatus = "idle" | "connecting" | "active" | "ended" | "error";
 
 export type LeadStatus = "qualified" | "needs_followup" | "not_interested" | null;
 
+export type ServiceTier = "economy" | "standard" | "comfort" | "storage";
+
 export interface RouteInfo {
   departure: string | null;
   arrival: string | null;
   date: string | null;
   // enriched fields extracted from transcript
-  clientName: string | null;
+  name: string | null;
   email: string | null;
   phone: string | null;
+  // service: ServiceTier | null;
   housingType: string | null;
   leadStatus: LeadStatus;
 }
@@ -23,9 +26,10 @@ export interface CallSummary {
   departure: string | null;
   arrival: string | null;
   date: string | null;
-  clientName: string | null;
+  name: string | null;
   email: string | null;
   phone: string | null;
+  // service: ServiceTier | null;
   housingType: string | null;
   leadStatus: LeadStatus;
   transcript: TranscriptEntry[];
